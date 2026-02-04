@@ -458,6 +458,8 @@ def run_web_setup(
             pass
     try:
         server.serve_forever()
+    except KeyboardInterrupt:
+        print("Setup server stopped.")
     finally:
         server.server_close()
 
