@@ -94,7 +94,7 @@ class NuvAgent < Formula
   end
 
   def install
-    python = Formula["python@3.12"].opt_bin/"python3"
+    python = Formula["python@3.12"].opt_bin/"python3.12"
     venv = virtualenv_create(libexec, python, system_site_packages: true)
 
     resources.each do |r|
