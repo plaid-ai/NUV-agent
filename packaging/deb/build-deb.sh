@@ -3,7 +3,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 PKG_NAME="nuv-agent"
-VERSION="${VERSION:-0.1.4}"
+VERSION="${VERSION:-0.1.5}"
 ARCH="${ARCH:-$(dpkg --print-architecture)}"
 BUILD_ROOT="${BUILD_ROOT:-$(mktemp -d)}"
 
@@ -23,7 +23,7 @@ Section: utils
 Priority: optional
 Architecture: ${ARCH}
 Maintainer: Nuvion <ops@nuvion.ai>
-Depends: python3 (>= 3.10), python3-venv, python3-pip, python3-gi, gstreamer1.0-tools, gstreamer1.0-plugins-base, gstreamer1.0-plugins-good, gstreamer1.0-plugins-bad, gstreamer1.0-plugins-ugly, gstreamer1.0-libav, gir1.2-gstreamer-1.0, gir1.2-gst-plugins-base-1.0, libgirepository1.0-1
+Depends: python3 (>= 3.10), python3-venv, python3-pip, python3-gi, gstreamer1.0-tools, gstreamer1.0-plugins-base, gstreamer1.0-plugins-good, gstreamer1.0-plugins-bad, gstreamer1.0-plugins-ugly, gstreamer1.0-libav, gir1.2-gstreamer-1.0, gir1.2-gst-plugins-base-1.0, libgirepository1.0-1 | libgirepository-1.0-1
 Description: Nuvion on-device agent
 CONTROL
 
