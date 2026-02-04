@@ -39,10 +39,10 @@ Python requirement: 3.10+
 ## macOS dev setup (Homebrew)
 Recommended for local runs on Apple Silicon.
 ```bash
-brew install gobject-introspection pygobject3 gstreamer \
+brew install python@3.12 gobject-introspection pygobject3 gstreamer \
   gst-plugins-base gst-plugins-good gst-plugins-bad gst-plugins-ugly gst-libav
 
-/opt/homebrew/bin/python3 -m venv .venv
+/opt/homebrew/opt/python@3.12/bin/python3 -m venv .venv --system-site-packages
 source .venv/bin/activate
 pip install -e .
 
@@ -52,7 +52,8 @@ export GST_PLUGIN_PATH=/opt/homebrew/lib/gstreamer-1.0
 
 python -m nuvion_app.cli run
 ```
-Note: `pygobject3` is tied to Homebrew’s Python. Using `/opt/homebrew/bin/python3` avoids `ModuleNotFoundError: gi`.
+Note: `pygobject3` is tied to Homebrew’s Python. Using `python@3.12` and `--system-site-packages`
+ensures the `gi` module is visible inside the venv.
 
 ## Quick start (docker)
 Build/run with docker-compose from `nuvion_app/`:

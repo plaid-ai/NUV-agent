@@ -30,7 +30,7 @@ def _build_parser() -> argparse.ArgumentParser:
 
 def main() -> None:
     if sys.version_info < (3, 10):
-        sys.stderr.write("Python 3.10+ is required.\\n")
+        sys.stderr.write("Python 3.10+ is required.\n")
         sys.exit(2)
     parser = _build_parser()
     args = parser.parse_args()
