@@ -623,13 +623,11 @@ def _render_form(
                 statusEl.textContent = data.error || "Failed to load spaces.";
                 return;
               }}
-              const spaces = (data.spaces || data || []).filter((space) =>
-                String(space.status || "").toUpperCase() === "APPROVED"
-              );
+              const spaces = (data.spaces || data || []);
               spaceSelect.innerHTML = "";
               if (!spaces.length) {{
-                spaceSelect.innerHTML = "<option value=''>No approved spaces found</option>";
-                statusEl.textContent = "No approved spaces found for this account.";
+                spaceSelect.innerHTML = "<option value=''>No spaces found</option>";
+                statusEl.textContent = "No spaces found for this account.";
                 return;
               }}
               spaceSelect.innerHTML = "<option value=''>Select a space</option>";
