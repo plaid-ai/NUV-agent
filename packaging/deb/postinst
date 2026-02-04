@@ -18,5 +18,13 @@ fi
 chown root:nuvion /etc/nuv-agent/agent.env
 chmod 0640 /etc/nuv-agent/agent.env
 
+if command -v python3 >/dev/null 2>&1; then
+  if [ ! -d /opt/nuv-agent/venv ]; then
+    python3 -m venv /opt/nuv-agent/venv
+  fi
+  /opt/nuv-agent/venv/bin/pip install --no-cache-dir --upgrade pip >/dev/null
+  /opt/nuv-agent/venv/bin/pip install --no-cache-dir --upgrade /opt/nuv-agent/src >/dev/null
+fi
+
 systemctl daemon-reload || true
 systemctl enable --now nuv-agent.service || true
