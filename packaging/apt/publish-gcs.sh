@@ -13,6 +13,7 @@ if [ ! -f "$DEB_PATH" ]; then
 fi
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$ROOT_DIR"
 APTLY_CONFIG="$ROOT_DIR/aptly.conf"
 REPO_NAME=${REPO_NAME:-nuv-agent}
 DIST=${DIST:-stable}
