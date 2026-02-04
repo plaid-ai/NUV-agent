@@ -984,6 +984,8 @@ class GStreamerInferenceApp:
         self.overlay = self.pipeline.get_by_name("zsad_overlay")
         if not self.overlay:
             log.warning("[PIPELINE] zsad_overlay not found.")
+        else:
+            self.update_overlay_text(self._default_overlay_text())
 
     def bus_call(self, bus, message, loop):
         msg_type = message.type
@@ -1019,6 +1021,14 @@ class GStreamerInferenceApp:
                 self.overlay.set_property("text", text)
             return False
         GLib.idle_add(_apply)
+
+    def _default_overlay_text(self) -> str:
+        backend = getattr(self.user_data, "backend", "none")
+        if backend == "triton":
+            return "ZSAD TRITON ON"
+        if backend == "siglip":
+            return "ZSAD ON"
+        return "ZSAD OFF"
 
     def run(self):
         def _start():
