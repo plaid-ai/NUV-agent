@@ -36,6 +36,24 @@ sudo apt install nuv-agent
 
 Python requirement: 3.10+
 
+## macOS dev setup (Homebrew)
+Recommended for local runs on Apple Silicon.
+```bash
+brew install gobject-introspection pygobject3 gstreamer \
+  gst-plugins-base gst-plugins-good gst-plugins-bad gst-plugins-ugly gst-libav
+
+/opt/homebrew/bin/python3 -m venv .venv
+source .venv/bin/activate
+pip install -e .
+
+export DYLD_LIBRARY_PATH=/opt/homebrew/lib
+export GI_TYPELIB_PATH=/opt/homebrew/lib/girepository-1.0
+export GST_PLUGIN_PATH=/opt/homebrew/lib/gstreamer-1.0
+
+python -m nuvion_app.cli run
+```
+Note: `pygobject3` is tied to Homebrew’s Python. Using `/opt/homebrew/bin/python3` avoids `ModuleNotFoundError: gi`.
+
 ## Quick start (docker)
 Build/run with docker-compose from `nuvion_app/`:
 ```bash
