@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if ! id -u nuvion >/dev/null 2>&1; then
+  useradd --system --no-create-home --shell /usr/sbin/nologin nuvion
+fi
+
+if getent group video >/dev/null 2>&1; then
+  usermod -a -G video nuvion || true
+fi
+
+install -d -m 0750 -o root -g nuvion /etc/nuv-agent
+
+if [ ! -f /etc/nuv-agent/agent.env ]; then
+  cp /opt/nuv-agent/share/agent.env.example /etc/nuv-agent/agent.env
+fi
+
+chown root:nuvion /etc/nuv-agent/agent.env
+chmod 0640 /etc/nuv-agent/agent.env
+
+systemctl daemon-reload || true
+systemctl enable --now nuv-agent.service || true

@@ -1,0 +1,38 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: apt-repo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: apt-repo
+  template:
+    metadata:
+      labels:
+        app: apt-repo
+    spec:
+      containers:
+        - name: nginx
+          image: nginx:stable-alpine
+          ports:
+            - containerPort: 80
+          volumeMounts:
+            - name: repo
+              mountPath: /usr/share/nginx/html
+      volumes:
+        - name: repo
+          persistentVolumeClaim:
+            claimName: apt-repo-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: apt-repo
+spec:
+  selector:
+    app: apt-repo
+  ports:
+    - port: 80
+      targetPort: 80
+  type: ClusterIP

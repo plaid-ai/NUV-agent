@@ -1,0 +1,42 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "nuv-agent"
+version = "0.1.0"
+description = "Nuvion on-device agent"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+  "numpy",
+  "python-dotenv",
+  "websockets",
+  "stomper",
+  "aiohttp",
+]
+
+[project.optional-dependencies]
+zsad = [
+  "torch",
+  "transformers",
+  "Pillow",
+]
+triton = [
+  "tritonclient[http]",
+  "opencv-python",
+]
+
+[project.scripts]
+nuv-agent = "nuvion_app.cli:main"
+
+[tool.setuptools]
+packages = [
+  "nuvion_app",
+  "nuvion_app.inference",
+  "nuvion_app.agent",
+]
+include-package-data = true
+
+[tool.setuptools.package-data]
+nuvion_app = ["config_template.env"]

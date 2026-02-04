@@ -1,0 +1,21 @@
+[Unit]
+Description=Nuvion Agent
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+Environment=NUV_AGENT_CONFIG=/etc/nuv-agent/agent.env
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/usr/bin/nuv-agent run
+Restart=always
+RestartSec=3
+User=nuvion
+Group=nuvion
+SupplementaryGroups=video
+WorkingDirectory=/
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

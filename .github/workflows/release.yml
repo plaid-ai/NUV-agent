@@ -1,0 +1,73 @@
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      TAP_REPO: plaid-ai/NUV-agent-homebrew
+      FORMULA_PATH: Formula/nuv-agent.rb
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Build sdist
+        run: |
+          python -m pip install --upgrade build
+          python -m build --sdist --outdir dist
+          ls -la dist
+
+      - name: Compute SHA256
+        id: sha
+        run: |
+          TARBALL=$(ls dist/nuv-agent-*.tar.gz | head -1)
+          echo "tarball=$TARBALL" >> $GITHUB_OUTPUT
+          SHA=$(python - <<PY
+import hashlib
+from pathlib import Path
+p = Path("$TARBALL")
+print(hashlib.sha256(p.read_bytes()).hexdigest())
+PY
+)
+          echo "sha256=$SHA" >> $GITHUB_OUTPUT
+          VERSION="${GITHUB_REF_NAME#v}"
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ steps.sha.outputs.tarball }}
+
+      - name: Update Homebrew tap
+        if: env.TAP_REPO != ''
+        env:
+          GH_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          VERSION: ${{ steps.sha.outputs.version }}
+          URL: https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/nuv-agent-${{ steps.sha.outputs.version }}.tar.gz
+          SHA256: ${{ steps.sha.outputs.sha256 }}
+        run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo "HOMEBREW_TAP_TOKEN is not set" >&2
+            exit 1
+          fi
+          git clone https://$GH_TOKEN@github.com/${TAP_REPO}.git tap
+          FORMULA_PATH=tap/$FORMULA_PATH URL=$URL SHA256=$SHA256 VERSION=$VERSION \
+            ./packaging/release/update-homebrew-formula.sh
+          cd tap
+          git config user.email "release-bot@plaidai.io"
+          git config user.name "release-bot"
+          git add "$FORMULA_PATH"
+          git commit -m "Update nuv-agent ${VERSION#v}"
+          git push origin HEAD

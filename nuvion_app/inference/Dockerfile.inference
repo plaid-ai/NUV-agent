@@ -1,0 +1,37 @@
+# nuvion_app/inference/Dockerfile.inference (진짜 최종본)
+FROM python:3.11-slim-bookworm
+
+WORKDIR /app
+
+# Step 1: 시스템 종속성 설치
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libgirepository1.0-dev \
+    gir1.2-gstreamer-1.0 \
+    gir1.2-gst-plugins-base-1.0 \
+    gstreamer1.0-plugins-base \
+    gstreamer1.0-plugins-good \
+    gstreamer1.0-plugins-bad \
+    gstreamer1.0-plugins-ugly \
+    gstreamer1.0-libav \
+    libcamera-dev \
+    libopencv-dev \
+    libusb-1.0-0-dev \
+    libcap-dev \
+    coreutils \
+    procps \
+    && rm -rf /var/lib/apt/lists/*
+
+# Step 2: Python dependencies
+ARG INSTALL_ZSAD_DEPS=false
+ARG INSTALL_TRITON_DEPS=false
+COPY nuvion_app/inference/requirements.txt /tmp/requirements.txt
+COPY nuvion_app/inference/requirements-zsad.txt /tmp/requirements-zsad.txt
+COPY nuvion_app/inference/requirements-triton.txt /tmp/requirements-triton.txt
+RUN pip install --no-cache-dir -r /tmp/requirements.txt \
+    && if [ "$INSTALL_ZSAD_DEPS" = "true" ]; then pip install --no-cache-dir -r /tmp/requirements-zsad.txt; fi \
+    && if [ "$INSTALL_TRITON_DEPS" = "true" ]; then pip install --no-cache-dir -r /tmp/requirements-triton.txt; fi
+
+# Step 3: 실행 명령어 (CMD)
+# setup_env.sh 호출 없이 바로 파이썬을 실행합니다.
+
+CMD ["python3", "-m", "nuvion_app.cli", "run"]

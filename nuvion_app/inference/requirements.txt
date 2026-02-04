@@ -1,0 +1,5 @@
+numpy
+python-dotenv
+websockets
+stomper
+aiohttp
