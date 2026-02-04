@@ -34,13 +34,7 @@ jobs:
         run: |
           TARBALL=$(ls dist/nuv-agent-*.tar.gz | head -1)
           echo "tarball=$TARBALL" >> $GITHUB_OUTPUT
-          SHA=$(python - <<PY
-import hashlib
-from pathlib import Path
-p = Path("$TARBALL")
-print(hashlib.sha256(p.read_bytes()).hexdigest())
-PY
-)
+          SHA=$(python -c "import hashlib, pathlib; p=pathlib.Path('$TARBALL'); print(hashlib.sha256(p.read_bytes()).hexdigest())")
           echo "sha256=$SHA" >> $GITHUB_OUTPUT
           VERSION="${GITHUB_REF_NAME#v}"
           echo "version=$VERSION" >> $GITHUB_OUTPUT
