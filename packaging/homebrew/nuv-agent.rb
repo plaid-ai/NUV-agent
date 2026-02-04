@@ -94,9 +94,20 @@ class NuvAgent < Formula
   end
 
   def install
-    venv = virtualenv_create(libexec, "python3", system_site_packages: true)
-    venv.pip_install resources
-    venv.pip_install_and_link buildpath
+    python = Formula["python@3.12"].opt_bin/"python3"
+    venv = virtualenv_create(libexec, python, system_site_packages: true)
+
+    resources.each do |r|
+      r.stage do
+        wheel = Dir["*.whl"].first
+        target = wheel ? Pathname.pwd/wheel : Pathname.pwd
+        system python, "-m", "pip", "--python=#{venv.root}/bin/python", "install",
+               "--no-deps", "--ignore-installed", "--no-compile", "--only-binary=:all:", target
+      end
+    end
+
+    system python, "-m", "pip", "--python=#{venv.root}/bin/python", "install",
+           "--no-deps", "--ignore-installed", "--no-compile", buildpath
     (etc/"nuv-agent").mkpath
 
     env = {
