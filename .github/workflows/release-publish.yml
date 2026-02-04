@@ -67,6 +67,7 @@ jobs:
             exit 1
           fi
           git clone https://x-access-token:${GH_TOKEN}@github.com/${TAP_REPO}.git tap
+          cp packaging/homebrew/nuv-agent.rb "tap/$FORMULA_PATH"
           FORMULA_PATH=tap/$FORMULA_PATH URL=$URL SHA256=$SHA256 VERSION=$VERSION \
             ./packaging/release/update-homebrew-formula.sh
           cd tap

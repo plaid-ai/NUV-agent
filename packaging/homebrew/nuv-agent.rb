@@ -5,7 +5,7 @@ class NuvAgent < Formula
   homepage "https://github.com/plaid-ai/NUV-agent"
   url "__URL__"
   sha256 "__SHA256__"
-  version "0.1.2"
+  version "0.1.3"
   license "Proprietary"
 
   depends_on "python@3.14"
@@ -26,6 +26,11 @@ class NuvAgent < Formula
   resource "python-dotenv" do
     url "https://files.pythonhosted.org/packages/14/1b/a298b06749107c305e1fe0f814c6c74aea7b2f1e10989cb30f544a1b3253/python_dotenv-1.2.1-py3-none-any.whl"
     sha256 "b81ee9561e9ca4004139c6cbba3a238c32b03e4894671e181b671e8cb8425d61"
+  end
+
+  resource "qrcode" do
+    url "https://files.pythonhosted.org/packages/dd/b8/d2d6d731733f51684bbf76bf34dab3b70a9148e8f2cef2bb544fccec681a/qrcode-8.2-py3-none-any.whl"
+    sha256 "16e64e0716c14960108e85d853062c9e8bba5ca8252c0b4d0231b9df4060ff4f"
   end
 
   resource "websockets" do

@@ -74,11 +74,15 @@ If a display is available, run:
 nuv-agent setup
 ```
 This starts a local setup UI at `http://127.0.0.1:8088` (override with `--host/--port`).
+The setup UI includes an **Auto Provision** section: login with an owner/admin account to create
+device credentials automatically (your account credentials are not stored on the device).
 
 For headless devices:
 ```bash
-nuv-agent setup --cli
+nuv-agent setup --qr
 ```
+This prints a pairing URL/QR code. After approval in the web console, the device credentials
+are saved to the config file.
 
 Default config path:
 - macOS (Homebrew): `/opt/homebrew/etc/nuv-agent/agent.env` (or `/usr/local/etc/nuv-agent/agent.env`)

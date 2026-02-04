@@ -14,6 +14,7 @@ def _build_parser() -> argparse.ArgumentParser:
     setup_parser.add_argument("--config", help="Path to config env file")
     setup_parser.add_argument("--web", action="store_true", help="Force web setup")
     setup_parser.add_argument("--cli", action="store_true", help="Force CLI setup")
+    setup_parser.add_argument("--qr", action="store_true", help="Use QR pairing (headless)")
     setup_parser.add_argument("--host", default="127.0.0.1", help="Web UI bind address")
     setup_parser.add_argument("--port", type=int, default=DEFAULT_PORT, help="Web UI port")
     setup_parser.add_argument("--no-open", action="store_true", help="Do not open browser")
@@ -38,11 +39,15 @@ def main() -> None:
     if args.command == "setup":
         if args.web and args.cli:
             parser.error("--web and --cli are mutually exclusive")
+        if args.qr and args.web:
+            parser.error("--qr and --web are mutually exclusive")
         use_web = None
+        qr = args.qr
         if args.web:
             use_web = True
         if args.cli:
             use_web = False
+            qr = False
         setup_config(
             config_path=args.config,
             use_web=use_web,
@@ -50,6 +55,7 @@ def main() -> None:
             port=args.port,
             open_browser=not args.no_open,
             advanced=args.advanced,
+            qr=qr,
         )
         return
 

@@ -1,10 +1,16 @@
 from __future__ import annotations
 
 import html
+import json
 import os
+import platform
+import socket
 import sys
 import threading
+import time
 import urllib.parse
+import urllib.request
+import urllib.error
 import webbrowser
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -16,6 +22,12 @@ from dotenv import dotenv_values, load_dotenv
 
 DEFAULT_PORT = 8088
 SECRET_KEY_MARKERS = ("PASSWORD",)
+DEVICE_TYPE = "NUV_AGENT"
+PAIRING_POLL_INTERVAL_SEC = int(os.getenv("NUVION_PAIRING_POLL_INTERVAL_SEC", "5"))
+PAIRING_TIMEOUT_SEC = int(os.getenv("NUVION_PAIRING_TIMEOUT_SEC", "600"))
+PROVISION_ENDPOINT = os.getenv("NUVION_DEVICE_PROVISION_ENDPOINT", "/devices/provision")
+PAIRING_INIT_ENDPOINT = os.getenv("NUVION_PAIRING_INIT_ENDPOINT", "/devices/pairings/init")
+PAIRING_STATUS_ENDPOINT = os.getenv("NUVION_PAIRING_STATUS_ENDPOINT", "/devices/pairings/{pairing_id}")
 REQUIRED_KEYS = {
     "NUVION_SERVER_BASE_URL",
     "NUVION_DEVICE_USERNAME",
@@ -157,6 +169,131 @@ def write_env(path: Path, lines: List[str], values: Dict[str, str]) -> None:
     path.write_text(content)
 
 
+def _normalize_base_url(url: str) -> str:
+    return url.rstrip("/")
+
+
+def _request_json(
+    url: str,
+    method: str = "POST",
+    payload: Optional[Dict[str, object]] = None,
+    headers: Optional[Dict[str, str]] = None,
+    timeout: int = 10,
+) -> Dict[str, object] | None:
+    data = None
+    if payload is not None:
+        data = json.dumps(payload).encode("utf-8")
+    req = urllib.request.Request(url, data=data, method=method)
+    req.add_header("Content-Type", "application/json")
+    if headers:
+        for key, value in headers.items():
+            req.add_header(key, value)
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            body = resp.read().decode("utf-8")
+            return json.loads(body) if body else {}
+    except urllib.error.HTTPError as exc:
+        detail = ""
+        try:
+            detail = exc.read().decode("utf-8")
+        except Exception:
+            pass
+        return {"error": f"{exc.code} {exc.reason}", "details": detail}
+    except Exception as exc:
+        return {"error": str(exc)}
+
+
+def _extract_data(response: Optional[Dict[str, object]]) -> Optional[Dict[str, object]]:
+    if not response:
+        return None
+    if "data" in response and isinstance(response["data"], dict):
+        return response["data"]  # type: ignore[return-value]
+    return response
+
+
+def _login_user(server_base_url: str, username: str, password: str) -> Optional[str]:
+    url = f"{_normalize_base_url(server_base_url)}/auth/login"
+    payload = {"username": username, "password": password}
+    response = _request_json(url, payload=payload)
+    data = _extract_data(response)
+    if not data:
+        return None
+    token = data.get("accessToken") or data.get("token")
+    return token if isinstance(token, str) else None
+
+
+def _provision_device(
+    server_base_url: str,
+    username: str,
+    password: str,
+    space_id: str,
+    device_name: str,
+) -> Optional[Dict[str, object]]:
+    token = _login_user(server_base_url, username, password)
+    if not token:
+        return None
+    payload: Dict[str, object] = {
+        "spaceId": space_id,
+        "deviceName": device_name,
+        "deviceType": DEVICE_TYPE,
+        "model": platform.machine(),
+        "os": platform.system(),
+    }
+    url = f"{_normalize_base_url(server_base_url)}{PROVISION_ENDPOINT}"
+    response = _request_json(url, payload=payload, headers={"Authorization": f"Bearer {token}"})
+    return _extract_data(response)
+
+
+def _init_pairing(server_base_url: str, device_name: str) -> Optional[Dict[str, object]]:
+    payload: Dict[str, object] = {
+        "deviceName": device_name,
+        "deviceType": DEVICE_TYPE,
+        "model": platform.machine(),
+        "os": platform.system(),
+    }
+    base_url = _normalize_base_url(server_base_url)
+    url = f"{base_url}{PAIRING_INIT_ENDPOINT}"
+    response = _request_json(url, payload=payload)
+    return _extract_data(response)
+
+
+def _wait_for_pairing(
+    server_base_url: str,
+    pairing_id: str,
+    pairing_secret: Optional[str],
+) -> Optional[Dict[str, object]]:
+    base_url = _normalize_base_url(server_base_url)
+    deadline = time.time() + PAIRING_TIMEOUT_SEC
+    headers = {}
+    if pairing_secret:
+        headers["X-Pairing-Secret"] = pairing_secret
+    status_url = f"{base_url}{PAIRING_STATUS_ENDPOINT.format(pairing_id=pairing_id)}"
+    while time.time() < deadline:
+        response = _request_json(status_url, method="GET", headers=headers)
+        data = _extract_data(response)
+        if data:
+            status = str(data.get("status") or data.get("state") or "").upper()
+            if status in {"ISSUED", "READY", "APPROVED", "ACTIVE"}:
+                return data
+            if status in {"EXPIRED", "REJECTED"}:
+                return None
+        time.sleep(PAIRING_POLL_INTERVAL_SEC)
+    return None
+
+
+def _print_qr(url: str) -> None:
+    print("Pairing URL:", url)
+    try:
+        import qrcode  # type: ignore
+
+        qr = qrcode.QRCode(border=1)
+        qr.add_data(url)
+        qr.make(fit=True)
+        qr.print_ascii(invert=True)
+    except Exception:
+        print("Install 'qrcode' to render QR in terminal.")
+
+
 def _merge_defaults(fields: List[Dict[str, str]], existing: Dict[str, str]) -> Dict[str, str]:
     merged: Dict[str, str] = dict(existing)
     for field in fields:
@@ -215,7 +352,12 @@ def _has_display() -> bool:
     return bool(os.getenv("DISPLAY") or os.getenv("WAYLAND_DISPLAY"))
 
 
-def _render_form(fields: List[Dict[str, str]], values: Dict[str, str], missing: List[str]) -> str:
+def _render_form(
+    fields: List[Dict[str, str]],
+    values: Dict[str, str],
+    missing: List[str],
+    device_name: str,
+) -> str:
     rows: List[str] = []
     for field in fields:
         key = field["key"]
@@ -253,6 +395,38 @@ def _render_form(fields: List[Dict[str, str]], values: Dict[str, str], missing: 
     if missing:
         error_items = " ".join(html.escape(key) for key in missing)
         error_block = f"<div class=\"error\">Missing required values: {error_items}</div>"
+
+    provision_block = """
+          <div class="card">
+            <h2>Auto Provision (recommended)</h2>
+            <p class="muted">
+              Login with a space owner/admin account to create a device credential.
+              Your account is not stored on the device.
+            </p>
+            <div class="grid">
+              <div class="field">
+                <label>Account username</label>
+                <input type="text" id="prov-username" autocomplete="username">
+              </div>
+              <div class="field">
+                <label>Account password</label>
+                <input type="password" id="prov-password" autocomplete="current-password">
+              </div>
+              <div class="field">
+                <label>Space ID</label>
+                <input type="text" id="prov-space" placeholder="space-id">
+              </div>
+              <div class="field">
+                <label>Device name</label>
+                <input type="text" id="prov-device" value="{device_name}">
+              </div>
+            </div>
+            <div class="actions">
+              <button type="button" onclick="provisionDevice()">Create Device</button>
+            </div>
+            <div id="provision-status" class="status"></div>
+          </div>
+    """.format(device_name=html.escape(device_name))
 
     return """
     <!doctype html>
@@ -297,6 +471,9 @@ def _render_form(fields: List[Dict[str, str]], values: Dict[str, str], missing: 
             box-shadow: 0 12px 30px rgba(0,0,0,0.08);
             border: 1px solid var(--border);
           }}
+          .card + .card {{
+            margin-top: 20px;
+          }}
           .field {{
             display: flex;
             flex-direction: column;
@@ -330,6 +507,21 @@ def _render_form(fields: List[Dict[str, str]], values: Dict[str, str], missing: 
             justify-content: flex-end;
             margin-top: 18px;
           }}
+          .grid {{
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 12px;
+          }}
+          .muted {{
+            color: var(--muted);
+            margin-top: 4px;
+            margin-bottom: 16px;
+          }}
+          .status {{
+            margin-top: 12px;
+            font-size: 13px;
+            color: var(--muted);
+          }}
           button {{
             background: var(--accent);
             color: white;
@@ -354,6 +546,7 @@ def _render_form(fields: List[Dict[str, str]], values: Dict[str, str], missing: 
             <h1>Nuvion Agent Setup</h1>
             <p>Enter device settings and save.</p>
           </header>
+          {provision_block}
           <div class="card">
             {error_block}
             <form method="post" action="/save">
@@ -364,9 +557,49 @@ def _render_form(fields: List[Dict[str, str]], values: Dict[str, str], missing: 
             </form>
           </div>
         </div>
+        <script>
+          async function provisionDevice() {{
+            const statusEl = document.getElementById("provision-status");
+            statusEl.textContent = "Provisioning device credentials...";
+            const payload = {{
+              serverBaseUrl: document.querySelector('input[name="NUVION_SERVER_BASE_URL"]').value.trim(),
+              username: document.getElementById("prov-username").value.trim(),
+              password: document.getElementById("prov-password").value,
+              spaceId: document.getElementById("prov-space").value.trim(),
+              deviceName: document.getElementById("prov-device").value.trim()
+            }};
+            try {{
+              const resp = await fetch("/api/provision", {{
+                method: "POST",
+                headers: {{ "Content-Type": "application/json" }},
+                body: JSON.stringify(payload)
+              }});
+              const data = await resp.json();
+              if (!resp.ok || data.error) {{
+                statusEl.textContent = data.error || "Provisioning failed.";
+                return;
+              }}
+              const deviceUsername = data.deviceUsername || data.username || "";
+              const devicePassword = data.devicePassword || data.password || data.deviceSecret || "";
+              const rtpIp = data.rtpRemoteIp || data.rtpIp || "";
+              if (deviceUsername) {{
+                document.querySelector('input[name="NUVION_DEVICE_USERNAME"]').value = deviceUsername;
+              }}
+              if (devicePassword) {{
+                document.querySelector('input[name="NUVION_DEVICE_PASSWORD"]').value = devicePassword;
+              }}
+              if (rtpIp) {{
+                document.querySelector('input[name="NUVION_RTP_REMOTE_IP"]').value = rtpIp;
+              }}
+              statusEl.textContent = "Device credentials created. Review and click Save.";
+            }} catch (err) {{
+              statusEl.textContent = "Provisioning error: " + err;
+            }}
+          }}
+        </script>
       </body>
     </html>
-    """.format(error_block=error_block, rows="\n".join(rows))
+    """.format(error_block=error_block, rows="\n".join(rows), provision_block=provision_block)
 
 
 def run_web_setup(
@@ -377,6 +610,7 @@ def run_web_setup(
 ) -> None:
     lines, fields = load_template()
     existing = _merge_defaults(fields, read_env(config_path))
+    device_name = socket.gethostname()
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, format: str, *args) -> None:  # noqa: A003
             return
@@ -389,10 +623,18 @@ def run_web_setup(
             self.end_headers()
             self.wfile.write(payload)
 
+        def _send_json(self, status: HTTPStatus, body: Dict[str, object]) -> None:
+            payload = json.dumps(body).encode("utf-8")
+            self.send_response(status)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload)
+
         def do_GET(self) -> None:  # noqa: N802
             if self.path in ("/", "/index.html"):
                 missing = _validate_required(existing)
-                body = _render_form(fields, existing, missing)
+                body = _render_form(fields, existing, missing, device_name)
                 self._send_html(HTTPStatus.OK, body)
                 return
             if self.path == "/health":
@@ -405,6 +647,32 @@ def run_web_setup(
             self.end_headers()
 
         def do_POST(self) -> None:  # noqa: N802
+            if self.path == "/api/provision":
+                length = int(self.headers.get("Content-Length", "0"))
+                body = self.rfile.read(length).decode("utf-8")
+                try:
+                    payload = json.loads(body) if body else {}
+                except json.JSONDecodeError:
+                    self._send_json(HTTPStatus.BAD_REQUEST, {"error": "Invalid JSON"})
+                    return
+
+                server_base_url = str(payload.get("serverBaseUrl") or existing.get("NUVION_SERVER_BASE_URL") or "").strip()
+                username = str(payload.get("username") or "").strip()
+                password = str(payload.get("password") or "")
+                space_id = str(payload.get("spaceId") or "").strip()
+                device_name_local = str(payload.get("deviceName") or device_name).strip()
+
+                if not server_base_url or not username or not password or not space_id:
+                    self._send_json(HTTPStatus.BAD_REQUEST, {"error": "Missing required provisioning fields."})
+                    return
+
+                data = _provision_device(server_base_url, username, password, space_id, device_name_local)
+                if not data:
+                    self._send_json(HTTPStatus.BAD_REQUEST, {"error": "Provisioning failed."})
+                    return
+                self._send_json(HTTPStatus.OK, data)
+                return
+
             if self.path != "/save":
                 self.send_response(HTTPStatus.NOT_FOUND)
                 self.end_headers()
@@ -424,7 +692,7 @@ def run_web_setup(
 
             missing = _validate_required(values)
             if missing:
-                body = _render_form(fields, values, missing)
+                body = _render_form(fields, values, missing, device_name)
                 self._send_html(HTTPStatus.BAD_REQUEST, body)
                 return
 
@@ -464,6 +732,71 @@ def run_web_setup(
         server.server_close()
 
 
+def run_qr_setup(config_path: Path, advanced: bool) -> None:
+    lines, fields = load_template()
+    existing = _merge_defaults(fields, read_env(config_path))
+    server_base_url = str(existing.get("NUVION_SERVER_BASE_URL") or "").strip()
+    if not server_base_url:
+        raise RuntimeError("NUVION_SERVER_BASE_URL is required for QR setup.")
+    device_name = socket.gethostname()
+
+    pairing = _init_pairing(server_base_url, device_name)
+    if not pairing:
+        raise RuntimeError("Failed to initiate pairing. Check server URL and network.")
+
+    pairing_url = str(
+        pairing.get("pairingUrl")
+        or pairing.get("url")
+        or pairing.get("pairingURL")
+        or ""
+    )
+    pairing_code = str(pairing.get("pairingCode") or pairing.get("code") or "").strip()
+    pairing_id = str(pairing.get("pairingId") or pairing.get("id") or "").strip()
+    pairing_secret = str(pairing.get("pairingSecret") or pairing.get("secret") or "").strip() or None
+
+    if pairing_code:
+        print("Pairing code:", pairing_code)
+    if pairing_url:
+        _print_qr(pairing_url)
+
+    if not pairing_id:
+        raise RuntimeError("Pairing response missing pairingId.")
+
+    print("Waiting for pairing approval...")
+    result = _wait_for_pairing(server_base_url, pairing_id, pairing_secret)
+    if not result:
+        raise RuntimeError("Pairing not approved or expired.")
+
+    values = dict(existing)
+    device_username = (
+        result.get("deviceUsername")
+        or result.get("username")
+        or result.get("deviceId")
+    )
+    device_password = (
+        result.get("devicePassword")
+        or result.get("password")
+        or result.get("deviceSecret")
+        or result.get("secret")
+    )
+    rtp_ip = result.get("rtpRemoteIp") or result.get("rtpIp")
+
+    if device_username:
+        values["NUVION_DEVICE_USERNAME"] = str(device_username)
+    if device_password:
+        values["NUVION_DEVICE_PASSWORD"] = str(device_password)
+    if rtp_ip:
+        values["NUVION_RTP_REMOTE_IP"] = str(rtp_ip)
+
+    missing = _validate_required(values)
+    if missing:
+        missing_str = ", ".join(missing)
+        raise RuntimeError(f"Missing required values after pairing: {missing_str}")
+
+    write_env(config_path, lines, values)
+    print(f"Saved: {config_path}")
+
+
 def setup_config(
     config_path: Optional[str] = None,
     use_web: Optional[bool] = None,
@@ -471,6 +804,7 @@ def setup_config(
     port: int = DEFAULT_PORT,
     open_browser: bool = True,
     advanced: bool = False,
+    qr: bool = False,
 ) -> Path:
     path = resolve_config_path(config_path)
 
@@ -480,14 +814,19 @@ def setup_config(
     if use_web:
         run_web_setup(path, host=host, port=port, open_browser=open_browser)
     else:
-        lines, fields = load_template()
-        existing = read_env(path)
-        values = prompt_cli(fields, existing, advanced=advanced)
-        missing = _validate_required(values)
-        if missing:
-            missing_str = ", ".join(missing)
-            raise RuntimeError(f"Missing required values: {missing_str}")
-        write_env(path, lines, values)
-        print(f"Saved: {path}")
+        if not qr and not _has_display():
+            qr = True
+        if qr:
+            run_qr_setup(path, advanced=advanced)
+        else:
+            lines, fields = load_template()
+            existing = read_env(path)
+            values = prompt_cli(fields, existing, advanced=advanced)
+            missing = _validate_required(values)
+            if missing:
+                missing_str = ", ".join(missing)
+                raise RuntimeError(f"Missing required values: {missing_str}")
+            write_env(path, lines, values)
+            print(f"Saved: {path}")
 
     return path
