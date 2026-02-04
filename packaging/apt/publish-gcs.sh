@@ -21,6 +21,7 @@ DIST=${DIST:-stable}
 COMPONENT=${COMPONENT:-main}
 ARCH=${ARCH:-arm64}
 BUCKET=${BUCKET:-apt.plaidai.io}
+CACHE_CONTROL=${CACHE_CONTROL:-"no-cache, max-age=0"}
 PUBLIC_DIR="$ROOT_DIR/.aptly/public"
 PUBLIC_KEY_PATH="$PUBLIC_DIR/public.gpg"
 INSTALL_SCRIPT_SRC="$ROOT_DIR/install-apt.sh"
@@ -69,6 +70,7 @@ fi
 echo "Syncing to gs://$BUCKET"
 # Requires: gcloud auth login, gsutil configured
 
-gsutil -m rsync -r "$PUBLIC_DIR" "gs://$BUCKET"
+gsutil -m -h "Cache-Control:$CACHE_CONTROL" rsync -r "$PUBLIC_DIR" "gs://$BUCKET"
+gsutil -m setmeta -h "Cache-Control:$CACHE_CONTROL" "gs://$BUCKET/**" >/dev/null
 
 echo "Published: https://$BUCKET"
