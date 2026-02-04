@@ -28,12 +28,19 @@ path = Path("$FORMULA_PATH")
 text = path.read_text()
 url = "$URL"
 sha = "$SHA256"
-text = text.replace("__URL__", url)
-text = text.replace("__SHA256__", sha)
-text = re.sub(r'url\s+"[^"]+"', f'url "{url}"', text)
-text = re.sub(r'sha256\s+"[^"]+"', f'sha256 "{sha}"', text)
 version = "$VERSION"
-text = re.sub(r'version\s+"[^"]+"', f'version "{version}"', text)
+
+parts = text.split("\n  resource ", 1)
+head = parts[0]
+tail = f"\n  resource {parts[1]}" if len(parts) > 1 else ""
+
+head = head.replace("__URL__", url)
+head = head.replace("__SHA256__", sha)
+head = re.sub(r'url\s+"[^"]+"', f'url "{url}"', head, count=1)
+head = re.sub(r'sha256\s+"[^"]+"', f'sha256 "{sha}"', head, count=1)
+head = re.sub(r'version\s+"[^"]+"', f'version "{version}"', head, count=1)
+
+text = head + tail
 path.write_text(text)
 print(f"Updated: {path}")
 PY
