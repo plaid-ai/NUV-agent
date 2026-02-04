@@ -54,6 +54,7 @@ python -m nuvion_app.cli run
 ```
 Note: `pygobject3` is tied to Homebrew’s Python. Using `python@3.14` and `--system-site-packages`
 ensures the `gi` module is visible inside the venv.
+Note: On macOS the default camera source is `avfvideosrc` (AVFoundation). Linux defaults to `/dev/video0`.
 
 ## Quick start (docker)
 Build/run with docker-compose from `nuvion_app/`:
