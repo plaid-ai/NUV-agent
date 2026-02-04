@@ -5,6 +5,10 @@ on:
     tags:
       - "v*"
   workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to release (e.g. v0.1.0)"
+        required: true
 
 jobs:
   release:
@@ -36,12 +40,18 @@ jobs:
           echo "tarball=$TARBALL" >> $GITHUB_OUTPUT
           SHA=$(python -c "import hashlib, pathlib; p=pathlib.Path('$TARBALL'); print(hashlib.sha256(p.read_bytes()).hexdigest())")
           echo "sha256=$SHA" >> $GITHUB_OUTPUT
-          VERSION="${GITHUB_REF_NAME#v}"
+          TAG="${{ inputs.tag }}"
+          if [ -z "$TAG" ]; then
+            TAG="${GITHUB_REF_NAME}"
+          fi
+          VERSION="${TAG#v}"
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
       - name: Create GitHub release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ steps.sha.outputs.tag }}
           files: ${{ steps.sha.outputs.tarball }}
 
       - name: Update Homebrew tap
@@ -49,7 +59,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
           VERSION: ${{ steps.sha.outputs.version }}
-          URL: https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/nuv_agent-${{ steps.sha.outputs.version }}.tar.gz
+          URL: https://github.com/${{ github.repository }}/releases/download/${{ steps.sha.outputs.tag }}/nuv_agent-${{ steps.sha.outputs.version }}.tar.gz
           SHA256: ${{ steps.sha.outputs.sha256 }}
         run: |
           if [ -z "$GH_TOKEN" ]; then
