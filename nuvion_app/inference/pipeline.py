@@ -130,6 +130,42 @@ if CLIP_ENABLED:
     os.makedirs(CLIP_SEGMENTS_DIR, exist_ok=True)
     os.makedirs(CLIP_CLIPS_DIR, exist_ok=True)
 
+_FFMPEG_PATH: str | None = None
+
+
+def resolve_ffmpeg_path() -> str | None:
+    global _FFMPEG_PATH
+    if _FFMPEG_PATH is not None:
+        return _FFMPEG_PATH
+
+    custom = os.getenv("NUVION_FFMPEG_PATH", "").strip()
+    if custom:
+        if os.path.isfile(custom) and os.access(custom, os.X_OK):
+            _FFMPEG_PATH = custom
+            log.info("[CLIP] Using ffmpeg from NUVION_FFMPEG_PATH=%s", custom)
+            return _FFMPEG_PATH
+        log.warning("[CLIP] NUVION_FFMPEG_PATH is not executable: %s", custom)
+
+    candidate = shutil.which("ffmpeg")
+    if candidate:
+        _FFMPEG_PATH = candidate
+        log.info("[CLIP] Using ffmpeg at %s", candidate)
+        return _FFMPEG_PATH
+
+    fallback_paths = (
+        "/opt/homebrew/bin/ffmpeg",
+        "/usr/local/bin/ffmpeg",
+        "/usr/bin/ffmpeg",
+        "/bin/ffmpeg",
+    )
+    for path in fallback_paths:
+        if os.path.isfile(path) and os.access(path, os.X_OK):
+            _FFMPEG_PATH = path
+            log.info("[CLIP] Using ffmpeg at %s", path)
+            return _FFMPEG_PATH
+
+    return None
+
 
 def extract_host_from_server_url(url: str) -> str:
     parsed = urlparse(url)
@@ -677,7 +713,8 @@ class NuvionEventState:
         return segments[-count:]
 
     def _build_clip_from_segments(self, detected_at: float) -> str | None:
-        if not shutil.which("ffmpeg"):
+        ffmpeg_path = resolve_ffmpeg_path()
+        if not ffmpeg_path:
             log.warning("[CLIP] ffmpeg not found. Skip clip creation.")
             return None
 
@@ -703,7 +740,7 @@ class NuvionEventState:
                     f.write(f"file '{seg}'\n")
 
             cmd = [
-                "ffmpeg",
+                ffmpeg_path,
                 "-y",
                 "-f",
                 "concat",
