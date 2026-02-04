@@ -9,14 +9,25 @@ if getent group video >/dev/null 2>&1; then
   usermod -a -G video nuvion || true
 fi
 
-install -d -m 0750 -o root -g nuvion /etc/nuv-agent
+install -d -m 0770 -o root -g nuvion /etc/nuv-agent
 
 if [ ! -f /etc/nuv-agent/agent.env ]; then
   cp /opt/nuv-agent/share/agent.env.example /etc/nuv-agent/agent.env
 fi
 
 chown root:nuvion /etc/nuv-agent/agent.env
-chmod 0640 /etc/nuv-agent/agent.env
+chmod 0660 /etc/nuv-agent/agent.env
+
+if [ -n "${SUDO_USER:-}" ] && [ "$SUDO_USER" != "root" ]; then
+  usermod -a -G nuvion "$SUDO_USER" || true
+  if getent group video >/dev/null 2>&1; then
+    usermod -a -G video "$SUDO_USER" || true
+  fi
+  if command -v setfacl >/dev/null 2>&1; then
+    setfacl -m "u:${SUDO_USER}:rwx" /etc/nuv-agent || true
+    setfacl -m "u:${SUDO_USER}:rw" /etc/nuv-agent/agent.env || true
+  fi
+fi
 
 if command -v python3 >/dev/null 2>&1; then
   python3 -m venv --clear /opt/nuv-agent/venv

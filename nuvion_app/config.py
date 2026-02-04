@@ -127,8 +127,11 @@ def resolve_config_path(explicit: Optional[str] = None) -> Path:
 
     candidates = _default_system_paths()
     for path in candidates:
-        if path.exists():
-            return path
+        try:
+            if path.exists():
+                return path
+        except PermissionError:
+            continue
     return candidates[0]
 
 

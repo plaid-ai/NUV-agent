@@ -24,7 +24,7 @@ if [ "$ARCH" != "arm64" ]; then
 fi
 
 sudo install -d -m 0755 /etc/apt/keyrings
-curl -fsSL "$REPO_URL/public.gpg" | sudo gpg --dearmor -o "$KEYRING"
+curl -fsSL "$REPO_URL/public.gpg" | sudo gpg --dearmor --yes -o "$KEYRING"
 sudo chmod 0644 "$KEYRING"
 
 echo "deb [signed-by=$KEYRING arch=$ARCH] $REPO_URL $DIST $COMPONENT" | sudo tee "$LIST_FILE" >/dev/null
