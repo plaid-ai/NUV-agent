@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ORG=${ORG:-plaid-ai}
-REPO=${REPO:-NUV-agent-homebrew}
+REPO=${REPO:-homebrew-NUV-agent-homebrew}
 FORMULA_SRC=${FORMULA_SRC:-"$(cd "$(dirname "${BASH_SOURCE[0]}")/../homebrew" && pwd)/nuv-agent.rb"}
 VISIBILITY=${VISIBILITY:-public}
 

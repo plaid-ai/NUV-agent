@@ -8,7 +8,7 @@ class NuvAgent < Formula
   version "0.1.0"
   license "Proprietary"
 
-  depends_on "python@3.11"
+  depends_on "python@3.12"
   depends_on "gstreamer"
   depends_on "gst-plugins-base"
   depends_on "gst-plugins-good"
@@ -21,6 +21,15 @@ class NuvAgent < Formula
   def install
     virtualenv_install_with_resources
     (etc/"nuv-agent").mkpath
+
+    env = {
+      "DYLD_LIBRARY_PATH" => "#{HOMEBREW_PREFIX}/lib",
+      "GI_TYPELIB_PATH" => "#{HOMEBREW_PREFIX}/lib/girepository-1.0",
+      "GST_PLUGIN_PATH" => "#{HOMEBREW_PREFIX}/lib/gstreamer-1.0",
+    }
+    real_bin = libexec/"bin/nuv-agent"
+    (bin/"nuv-agent").unlink if (bin/"nuv-agent").exist?
+    (bin/"nuv-agent").write_env_script(real_bin, env)
   end
 
   service do

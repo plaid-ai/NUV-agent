@@ -3,7 +3,7 @@
 This directory contains packaging templates for Homebrew and Debian/Ubuntu.
 
 ## Homebrew (tap)
-1. Create a tap repo (e.g., `plaid-ai/NUV-agent-homebrew`).
+1. Create a tap repo (e.g., `plaid-ai/homebrew-NUV-agent-homebrew`).
 2. Copy `packaging/homebrew/nuv-agent.rb` into `Formula/nuv-agent.rb`.
 3. Replace `__URL__` and `__SHA256__` with the release tarball URL and SHA256.
 4. Tag a release matching the formula version.

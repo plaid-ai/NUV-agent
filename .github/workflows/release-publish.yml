@@ -16,7 +16,7 @@ jobs:
     permissions:
       contents: write
     env:
-      TAP_REPO: plaid-ai/NUV-agent-homebrew
+      TAP_REPO: plaid-ai/homebrew-NUV-agent-homebrew
       FORMULA_PATH: Formula/nuv-agent.rb
     steps:
       - name: Checkout
