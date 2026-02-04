@@ -8,7 +8,7 @@ class NuvAgent < Formula
   version "0.1.0"
   license "Proprietary"
 
-  depends_on "python@3.12"
+  depends_on "python@3.14"
   depends_on "gstreamer"
   depends_on "gst-plugins-base"
   depends_on "gst-plugins-good"
@@ -19,8 +19,8 @@ class NuvAgent < Formula
   depends_on "pygobject3"
 
   resource "numpy" do
-    url "https://files.pythonhosted.org/packages/1f/f8/55483431f2b2fd015ae6ed4fe62288823ce908437ed49db5a03d15151678/numpy-2.4.2-cp312-cp312-macosx_11_0_arm64.whl"
-    sha256 "40397bda92382fcec844066efb11f13e1c9a3e2a8e8f318fb72ed8b6db9f60f1"
+    url "https://files.pythonhosted.org/packages/25/7a/1fee4329abc705a469a4afe6e69b1ef7e915117747886327104a8493a955/numpy-2.4.2-cp314-cp314-macosx_11_0_arm64.whl"
+    sha256 "d1240d50adff70c2a88217698ca844723068533f3f5c5fa6ee2e3220e3bdb000"
   end
 
   resource "python-dotenv" do
@@ -29,8 +29,8 @@ class NuvAgent < Formula
   end
 
   resource "websockets" do
-    url "https://files.pythonhosted.org/packages/40/1e/9771421ac2286eaab95b8575b0cb701ae3663abf8b5e1f64f1fd90d0a673/websockets-16.0-cp312-cp312-macosx_11_0_arm64.whl"
-    sha256 "86890e837d61574c92a97496d590968b23c2ef0aeb8a9bc9421d174cd378ae39"
+    url "https://files.pythonhosted.org/packages/bb/f4/d3c9220d818ee955ae390cf319a7c7a467beceb24f05ee7aaaa2414345ba/websockets-16.0-cp314-cp314-macosx_11_0_arm64.whl"
+    sha256 "fd3cb4adb94a2a6e2b7c0d8d05cb94e6f1c81a0cf9dc2694fb65c7e8d94c42e4"
   end
 
   resource "stomper" do
@@ -39,8 +39,8 @@ class NuvAgent < Formula
   end
 
   resource "aiohttp" do
-    url "https://files.pythonhosted.org/packages/5d/43/4be01406b78e1be8320bb8316dc9c42dbab553d281c40364e0f862d5661c/aiohttp-3.13.3-cp312-cp312-macosx_11_0_arm64.whl"
-    sha256 "27234ef6d85c914f9efeb77ff616dbf4ad2380be0cda40b4db086ffc7ddd1b7d"
+    url "https://files.pythonhosted.org/packages/e8/0b/b97660c5fd05d3495b4eb27f2d0ef18dc1dc4eff7511a9bf371397ff0264/aiohttp-3.13.3-cp314-cp314-macosx_11_0_arm64.whl"
+    sha256 "c685f2d80bb67ca8c3837823ad76196b3694b0159d232206d1e461d3d434666f"
   end
 
   resource "aiohappyeyeballs" do
@@ -59,23 +59,23 @@ class NuvAgent < Formula
   end
 
   resource "frozenlist" do
-    url "https://files.pythonhosted.org/packages/2b/94/5c8a2b50a496b11dd519f4a24cb5496cf125681dd99e94c604ccdea9419a/frozenlist-1.8.0-cp312-cp312-macosx_11_0_arm64.whl"
-    sha256 "f833670942247a14eafbb675458b4e61c82e002a148f49e68257b79296e865c4"
+    url "https://files.pythonhosted.org/packages/a1/93/72b1736d68f03fda5fdf0f2180fb6caaae3894f1b854d006ac61ecc727ee/frozenlist-1.8.0-cp314-cp314-macosx_11_0_arm64.whl"
+    sha256 "4970ece02dbc8c3a92fcc5228e36a3e933a01a999f7094ff7c23fbd2beeaa67c"
   end
 
   resource "multidict" do
-    url "https://files.pythonhosted.org/packages/a9/65/1caac9d4cd32e8433908683446eebc953e82d22b03d10d41a5f0fefe991b/multidict-6.7.1-cp312-cp312-macosx_11_0_arm64.whl"
-    sha256 "b0fa96985700739c4c7853a43c0b3e169360d6855780021bfc6d0f1ce7c123e7"
+    url "https://files.pythonhosted.org/packages/f1/4f/733c48f270565d78b4544f2baddc2fb2a245e5a8640254b12c36ac7ac68e/multidict-6.7.1-cp314-cp314-macosx_11_0_arm64.whl"
+    sha256 "0e161ddf326db5577c3a4cc2d8648f81456e8a20d40415541587a71620d7a7d1"
   end
 
   resource "propcache" do
-    url "https://files.pythonhosted.org/packages/0a/b6/5c9a0e42df4d00bfb4a3cbbe5cf9f54260300c88a0e9af1f47ca5ce17ac0/propcache-0.4.1-cp312-cp312-macosx_11_0_arm64.whl"
-    sha256 "f048da1b4f243fc44f205dfd320933a951b8d89e0afd4c7cacc762a8b9165207"
+    url "https://files.pythonhosted.org/packages/b2/fa/89a8ef0468d5833a23fff277b143d0573897cf75bd56670a6d28126c7d68/propcache-0.4.1-cp314-cp314-macosx_11_0_arm64.whl"
+    sha256 "9f302f4783709a78240ebc311b793f123328716a60911d667e0c036bc5dcbded"
   end
 
   resource "yarl" do
-    url "https://files.pythonhosted.org/packages/ba/f5/0601483296f09c3c65e303d60c070a5c19fcdbc72daa061e96170785bc7d/yarl-1.22.0-cp312-cp312-macosx_11_0_arm64.whl"
-    sha256 "939fe60db294c786f6b7c2d2e121576628468f65453d86b0fe36cb52f987bd74"
+    url "https://files.pythonhosted.org/packages/11/63/ff458113c5c2dac9a9719ac68ee7c947cb621432bcf28c9972b1c0e83938/yarl-1.22.0-cp314-cp314-macosx_11_0_arm64.whl"
+    sha256 "594fcab1032e2d2cc3321bb2e51271e7cd2b516c7d9aee780ece81b07ff8244b"
   end
 
   resource "idna" do
@@ -94,7 +94,7 @@ class NuvAgent < Formula
   end
 
   def install
-    python = Formula["python@3.12"].opt_bin/"python3.12"
+    python = Formula["python@3.14"].opt_bin/"python3.14"
     venv = virtualenv_create(libexec, python, system_site_packages: true)
 
     resources.each do |r|
