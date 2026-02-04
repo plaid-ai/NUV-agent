@@ -7,6 +7,7 @@ if [ $# -lt 1 ]; then
 fi
 
 DEB_PATH="$1"
+DEB_PATH="$(realpath "$DEB_PATH")"
 if [ ! -f "$DEB_PATH" ]; then
   echo "Deb not found: $DEB_PATH" >&2
   exit 1
