@@ -16,6 +16,7 @@ Homebrew (Apple Silicon):
 brew tap plaid-ai/NUV-agent-homebrew
 brew install nuv-agent
 ```
+Note: Homebrew install includes Zero-shot (torch/transformers/Pillow) deps. The download is large.
 
 APT (Jetson/Ubuntu, arm64):
 ```bash
