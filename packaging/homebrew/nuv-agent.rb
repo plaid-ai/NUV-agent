@@ -94,7 +94,9 @@ class NuvAgent < Formula
   end
 
   def install
-    virtualenv_install_with_resources
+    venv = virtualenv_create(libexec, "python3", system_site_packages: true)
+    venv.pip_install resources
+    venv.pip_install_and_link buildpath
     (etc/"nuv-agent").mkpath
 
     env = {
