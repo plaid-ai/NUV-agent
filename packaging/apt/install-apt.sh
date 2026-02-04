@@ -30,4 +30,13 @@ sudo chmod 0644 "$KEYRING"
 echo "deb [signed-by=$KEYRING arch=$ARCH] $REPO_URL $DIST $COMPONENT" | sudo tee "$LIST_FILE" >/dev/null
 
 sudo apt update
+
+if ! apt-cache show libgirepository1.0-1 >/dev/null 2>&1; then
+  if ! command -v add-apt-repository >/dev/null 2>&1; then
+    sudo apt-get install -y software-properties-common
+  fi
+  sudo add-apt-repository -y universe
+  sudo apt update
+fi
+
 sudo apt install -y nuv-agent
