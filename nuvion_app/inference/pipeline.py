@@ -818,12 +818,22 @@ def build_source_pipeline(video_source: str, width: int, height: int, fps: int) 
         return GST_SOURCE_OVERRIDE
 
     if not video_source or video_source == "auto":
-        video_source = "/dev/video0"
+        video_source = "avf" if sys.platform == "darwin" else "/dev/video0"
 
     if video_source.startswith("/dev/video"):
-        source = f"v4l2src device={video_source}"
-    elif video_source.lower() == "rpi":
+        if sys.platform == "darwin":
+            source = "avfvideosrc"
+        else:
+            source = f"v4l2src device={video_source}"
+    elif video_source.lower() in {"rpi", "libcamera"}:
         source = "libcamerasrc"
+    elif video_source.lower().startswith(("avf", "avfoundation", "mac")):
+        device_index = None
+        if ":" in video_source:
+            _, maybe_index = video_source.split(":", 1)
+            if maybe_index.isdigit():
+                device_index = int(maybe_index)
+        source = f"avfvideosrc device-index={device_index}" if device_index is not None else "avfvideosrc"
     else:
         source = "autovideosrc"
 

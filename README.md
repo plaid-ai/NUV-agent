@@ -96,6 +96,8 @@ For dev, `.env` in the repo is used automatically.
 - `NUVION_ZSAD_BACKEND`: `siglip` 또는 `triton`
  - 기본 ZSAD 모델: `google/siglip2-base-patch16-224`
 
+macOS note: use `NUVION_VIDEO_SOURCE=avf` (default camera) or `avf:<index>` to select a camera.
+
 Optional deps:
 - Zero-shot: `pip install -e .[zsad]`
 - Triton: `pip install -e .[triton]`
