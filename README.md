@@ -21,10 +21,14 @@ Note: Homebrew install includes Zero-shot (torch/transformers/Pillow) deps. The 
 APT (Jetson/Ubuntu, arm64):
 ```bash
 sudo install -d /etc/apt/keyrings
-sudo curl -fsSL https://apt.plaidai.io/public.gpg -o /etc/apt/keyrings/plaidai.gpg
+curl -fsSL https://apt.plaidai.io/public.gpg | sudo gpg --dearmor -o /etc/apt/keyrings/plaidai.gpg
 echo "deb [signed-by=/etc/apt/keyrings/plaidai.gpg arch=arm64] https://apt.plaidai.io stable main" | sudo tee /etc/apt/sources.list.d/plaidai.list
 sudo apt update
 sudo apt install nuv-agent
+```
+One-line install:
+```bash
+curl -fsSL https://apt.plaidai.io/install-apt.sh | bash
 ```
 
 ## Quick start (dev)

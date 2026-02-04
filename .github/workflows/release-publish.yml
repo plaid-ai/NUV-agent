@@ -77,3 +77,91 @@ jobs:
           git add "$FORMULA_PATH"
           git commit -m "Update nuv-agent ${VERSION#v}"
           git push origin HEAD
+
+  apt-publish:
+    name: Publish APT repo
+    runs-on: ubuntu-24.04-arm
+    needs: release
+    permissions:
+      contents: read
+    env:
+      GNUPGHOME: ${{ github.workspace }}/.gnupg
+      GPG_KEY_ID: 55E5CAF706571888
+      BUCKET: apt.plaidai.io
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve version
+        id: version
+        run: |
+          TAG="${{ inputs.tag }}"
+          if [ -z "$TAG" ]; then
+            TAG="${GITHUB_REF_NAME}"
+          fi
+          VERSION="${TAG#v}"
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Install build deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y dpkg-dev python3-venv python3-pip aptly gnupg
+
+      - name: Verify arm64 runner
+        run: |
+          ARCH=$(dpkg --print-architecture)
+          if [ "$ARCH" != "arm64" ]; then
+            echo "Runner architecture must be arm64, got $ARCH" >&2
+            exit 1
+          fi
+
+      - name: Import GPG key
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.APT_GPG_PRIVATE_KEY }}
+          GPG_PASSPHRASE: ${{ secrets.APT_GPG_PASSPHRASE }}
+        run: |
+          if [ -z "$GPG_PRIVATE_KEY" ]; then
+            echo "APT_GPG_PRIVATE_KEY secret not set" >&2
+            exit 1
+          fi
+          if [ -z "$GPG_PASSPHRASE" ]; then
+            echo "APT_GPG_PASSPHRASE secret not set" >&2
+            exit 1
+          fi
+          mkdir -p "$GNUPGHOME"
+          chmod 700 "$GNUPGHOME"
+          echo "allow-loopback-pinentry" > "$GNUPGHOME/gpg-agent.conf"
+          echo "pinentry-mode loopback" > "$GNUPGHOME/gpg.conf"
+          gpgconf --kill gpg-agent || true
+          echo "$GPG_PRIVATE_KEY" | gpg --batch --import
+          echo "test" | gpg --batch --yes --pinentry-mode loopback --passphrase "$GPG_PASSPHRASE" --local-user "$GPG_KEY_ID" --sign >/dev/null
+
+      - name: Auth GCP
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Setup gcloud
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+
+      - name: Build deb
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          cd packaging/deb
+          ./build-deb.sh
+
+      - name: Publish to APT (GCS)
+        env:
+          GPG_PASSPHRASE: ${{ secrets.APT_GPG_PASSPHRASE }}
+        run: |
+          DEB_PATH="dist/nuv-agent_${{ steps.version.outputs.version }}_arm64.deb"
+          if [ ! -f "$DEB_PATH" ]; then
+            echo "Deb not found at $DEB_PATH" >&2
+            ls -la dist || true
+            exit 1
+          fi
+          packaging/apt/publish-gcs.sh "$DEB_PATH"

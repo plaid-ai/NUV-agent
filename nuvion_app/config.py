@@ -808,6 +808,9 @@ def setup_config(
 ) -> Path:
     path = resolve_config_path(config_path)
 
+    if qr:
+        use_web = False
+
     if use_web is None:
         use_web = _has_display()
 
