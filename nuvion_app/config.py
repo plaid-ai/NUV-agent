@@ -214,6 +214,17 @@ def _extract_data(response: Optional[Dict[str, object]]) -> Optional[Dict[str, o
     return response
 
 
+def _extract_list(response: Optional[Dict[str, object]] | List[object]) -> Optional[List[object]]:
+    if not response:
+        return None
+    if isinstance(response, list):
+        return response
+    data = response.get("data")
+    if isinstance(data, list):
+        return data
+    return None
+
+
 def _login_user(server_base_url: str, username: str, password: str) -> Optional[str]:
     url = f"{_normalize_base_url(server_base_url)}/auth/login"
     payload = {"username": username, "password": password}
@@ -245,6 +256,19 @@ def _provision_device(
     url = f"{_normalize_base_url(server_base_url)}{PROVISION_ENDPOINT}"
     response = _request_json(url, payload=payload, headers={"Authorization": f"Bearer {token}"})
     return _extract_data(response)
+
+
+def _fetch_spaces(
+    server_base_url: str,
+    username: str,
+    password: str,
+) -> Optional[List[object]]:
+    token = _login_user(server_base_url, username, password)
+    if not token:
+        return None
+    url = f"{_normalize_base_url(server_base_url)}/spaces/me"
+    response = _request_json(url, method="GET", headers={"Authorization": f"Bearer {token}"})
+    return _extract_list(response)
 
 
 def _init_pairing(server_base_url: str, device_name: str) -> Optional[Dict[str, object]]:
@@ -416,8 +440,10 @@ def _render_form(
                 <input type="password" id="prov-password" autocomplete="current-password">
               </div>
               <div class="field">
-                <label>Space ID</label>
-                <input type="text" id="prov-space" placeholder="space-id">
+                <label>Space</label>
+                <select id="prov-space-select" disabled>
+                  <option value="">Login to load spaces</option>
+                </select>
               </div>
               <div class="field">
                 <label>Device name</label>
@@ -425,7 +451,8 @@ def _render_form(
               </div>
             </div>
             <div class="actions">
-              <button type="button" onclick="provisionDevice()">Create Device</button>
+              <button type="button" id="prov-login" onclick="loadSpaces()">Login & Load Spaces</button>
+              <button type="button" id="prov-create" onclick="provisionDevice()" disabled>Create Device</button>
             </div>
             <div id="provision-status" class="status"></div>
           </div>
@@ -500,6 +527,13 @@ def _render_form(
             border-radius: 8px;
             font-size: 14px;
           }}
+          select {{
+            padding: 10px 12px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            font-size: 14px;
+            background: white;
+          }}
           .note {{
             font-size: 12px;
             color: var(--muted);
@@ -561,14 +595,74 @@ def _render_form(
           </div>
         </div>
         <script>
+          async function loadSpaces() {{
+            const statusEl = document.getElementById("provision-status");
+            const loginBtn = document.getElementById("prov-login");
+            const createBtn = document.getElementById("prov-create");
+            const spaceSelect = document.getElementById("prov-space-select");
+            const serverBaseUrl = document.querySelector('input[name="NUVION_SERVER_BASE_URL"]').value.trim();
+            const username = document.getElementById("prov-username").value.trim();
+            const password = document.getElementById("prov-password").value;
+            if (!serverBaseUrl || !username || !password) {{
+              statusEl.textContent = "Server URL, username, and password are required.";
+              return;
+            }}
+            loginBtn.disabled = true;
+            createBtn.disabled = true;
+            statusEl.textContent = "Loading spaces...";
+            spaceSelect.innerHTML = "<option value=''>Loading...</option>";
+            spaceSelect.disabled = true;
+            try {{
+              const resp = await fetch("/api/spaces", {{
+                method: "POST",
+                headers: {{ "Content-Type": "application/json" }},
+                body: JSON.stringify({{ serverBaseUrl, username, password }})
+              }});
+              const data = await resp.json();
+              if (!resp.ok || data.error) {{
+                statusEl.textContent = data.error || "Failed to load spaces.";
+                return;
+              }}
+              const spaces = (data.spaces || data || []).filter((space) =>
+                String(space.status || "").toUpperCase() === "APPROVED"
+              );
+              spaceSelect.innerHTML = "";
+              if (!spaces.length) {{
+                spaceSelect.innerHTML = "<option value=''>No approved spaces found</option>";
+                statusEl.textContent = "No approved spaces found for this account.";
+                return;
+              }}
+              spaceSelect.innerHTML = "<option value=''>Select a space</option>";
+              spaces.forEach((space) => {{
+                const option = document.createElement("option");
+                option.value = space.id;
+                option.textContent = `${{space.name || "Space"}} (#${{space.id}})`;
+                spaceSelect.appendChild(option);
+              }});
+              spaceSelect.disabled = false;
+              createBtn.disabled = false;
+              statusEl.textContent = "Spaces loaded. Select a space to provision.";
+            }} catch (err) {{
+              statusEl.textContent = "Failed to load spaces: " + err;
+            }} finally {{
+              loginBtn.disabled = false;
+            }}
+          }}
+
           async function provisionDevice() {{
             const statusEl = document.getElementById("provision-status");
+            const spaceSelect = document.getElementById("prov-space-select");
+            const spaceId = spaceSelect.value;
+            if (!spaceId) {{
+              statusEl.textContent = "Please select a space.";
+              return;
+            }}
             statusEl.textContent = "Provisioning device credentials...";
             const payload = {{
               serverBaseUrl: document.querySelector('input[name="NUVION_SERVER_BASE_URL"]').value.trim(),
               username: document.getElementById("prov-username").value.trim(),
               password: document.getElementById("prov-password").value,
-              spaceId: document.getElementById("prov-space").value.trim(),
+              spaceId: spaceId,
               deviceName: document.getElementById("prov-device").value.trim()
             }};
             try {{
@@ -650,6 +744,28 @@ def run_web_setup(
             self.end_headers()
 
         def do_POST(self) -> None:  # noqa: N802
+            if self.path == "/api/spaces":
+                length = int(self.headers.get("Content-Length", "0"))
+                body = self.rfile.read(length).decode("utf-8")
+                try:
+                    payload = json.loads(body) if body else {}
+                except json.JSONDecodeError:
+                    self._send_json(HTTPStatus.BAD_REQUEST, {"error": "Invalid JSON"})
+                    return
+
+                server_base_url = str(payload.get("serverBaseUrl") or existing.get("NUVION_SERVER_BASE_URL") or "").strip()
+                username = str(payload.get("username") or "").strip()
+                password = str(payload.get("password") or "")
+                if not server_base_url or not username or not password:
+                    self._send_json(HTTPStatus.BAD_REQUEST, {"error": "Missing credentials or server base URL."})
+                    return
+                spaces = _fetch_spaces(server_base_url, username, password)
+                if spaces is None:
+                    self._send_json(HTTPStatus.BAD_REQUEST, {"error": "Failed to load spaces."})
+                    return
+                self._send_json(HTTPStatus.OK, {"spaces": spaces})
+                return
+
             if self.path == "/api/provision":
                 length = int(self.headers.get("Content-Length", "0"))
                 body = self.rfile.read(length).decode("utf-8")
