@@ -129,6 +129,16 @@ CLIP_CLIPS_DIR = os.path.join(CLIP_OUTPUT_DIR, "clips")
 if CLIP_ENABLED:
     os.makedirs(CLIP_SEGMENTS_DIR, exist_ok=True)
     os.makedirs(CLIP_CLIPS_DIR, exist_ok=True)
+    clip_base_mode = 0o1777 if CLIP_OUTPUT_DIR.startswith(("/tmp", "/var/tmp")) else 0o770
+    try:
+        os.chmod(CLIP_OUTPUT_DIR, clip_base_mode)
+    except OSError:
+        pass
+    try:
+        os.chmod(CLIP_SEGMENTS_DIR, 0o777)
+        os.chmod(CLIP_CLIPS_DIR, 0o777)
+    except OSError:
+        pass
 
 _FFMPEG_PATH: str | None = None
 

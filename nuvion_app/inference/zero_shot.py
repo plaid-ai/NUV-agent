@@ -32,10 +32,17 @@ class ZeroShotAnomalyDetector:
 
         try:
             import torch
-            from transformers import AutoModel, AutoProcessor
+            import transformers
             from PIL import Image
         except Exception as exc:
             log.warning("Zero-shot dependencies not available: %s", exc)
+            self.enabled = False
+            return
+
+        AutoModel = getattr(transformers, "AutoModel", None)
+        AutoProcessor = getattr(transformers, "AutoProcessor", None)
+        if AutoModel is None:
+            log.warning("Zero-shot dependencies not available: transformers AutoModel missing")
             self.enabled = False
             return
 
@@ -47,14 +54,14 @@ class ZeroShotAnomalyDetector:
 
         try:
             self._model = AutoModel.from_pretrained(self.model_name).to(device).eval()
-            try:
+            if AutoProcessor is not None:
                 self._processor = AutoProcessor.from_pretrained(self.model_name)
-            except AttributeError:
+            else:
                 from transformers import SiglipImageProcessor, GemmaTokenizerFast, SiglipProcessor
                 image_processor = SiglipImageProcessor.from_pretrained(self.model_name)
                 tokenizer = GemmaTokenizerFast.from_pretrained(self.model_name)
                 self._processor = SiglipProcessor(image_processor=image_processor, tokenizer=tokenizer)
-                log.info("Used manual SiglipProcessor construction (transformers compat workaround)")
+                log.info("Used manual SiglipProcessor construction (transformers compat fallback)")
             self._torch = torch
             self._Image = Image
             self._device = device
