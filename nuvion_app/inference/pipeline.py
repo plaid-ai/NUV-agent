@@ -150,9 +150,20 @@ def _ensure_clip_dirs() -> None:
         except OSError:
             return False
 
+    def ensure_segments_writable(path: str) -> bool:
+        pattern = os.path.join(path, "segment_*.mp4")
+        for seg in glob.glob(pattern):
+            try:
+                os.remove(seg)
+            except OSError:
+                return False
+        return True
+
     try:
         CLIP_SEGMENTS_DIR, CLIP_CLIPS_DIR = init_dirs(CLIP_OUTPUT_DIR)
         if not touch_test(CLIP_SEGMENTS_DIR):
+            raise PermissionError
+        if not ensure_segments_writable(CLIP_SEGMENTS_DIR):
             raise PermissionError
         clip_base_mode = 0o1777 if CLIP_OUTPUT_DIR.startswith(("/tmp", "/var/tmp")) else 0o770
         try:
@@ -166,7 +177,7 @@ def _ensure_clip_dirs() -> None:
             pass
         return
     except PermissionError:
-        fallback_dir = f"/tmp/nuvion_clips_{os.getuid()}"
+        fallback_dir = f"/tmp/nuvion_clips_{os.getuid()}_{int(time.time())}"
         log.warning(
             "[CLIP] No write access to %s. Falling back to %s",
             CLIP_OUTPUT_DIR,

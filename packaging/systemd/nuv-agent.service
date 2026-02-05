@@ -13,6 +13,7 @@ PermissionsStartOnly=true
 ExecStartPre=/bin/mkdir -p /tmp/nuvion_clips/segments /tmp/nuvion_clips/clips
 ExecStartPre=/bin/chmod 1777 /tmp/nuvion_clips
 ExecStartPre=/bin/chmod 0777 /tmp/nuvion_clips/segments /tmp/nuvion_clips/clips
+ExecStartPre=/bin/sh -c 'rm -f /tmp/nuvion_clips/segments/segment_*.mp4 /tmp/nuvion_clips/clips/clip_*.mp4 || true'
 ExecStart=/usr/bin/nuv-agent run
 Restart=always
 RestartSec=3
