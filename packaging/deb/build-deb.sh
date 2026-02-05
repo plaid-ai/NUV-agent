@@ -3,7 +3,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 PKG_NAME="nuv-agent"
-VERSION="${VERSION:-0.1.18}"
+VERSION="${VERSION:-0.1.19}"
 ARCH="${ARCH:-$(dpkg --print-architecture)}"
 BUILD_ROOT="${BUILD_ROOT:-$(mktemp -d)}"
 
@@ -45,7 +45,13 @@ rsync -a \
 cp "$ROOT_DIR/nuvion_app/config_template.env" "$PKG_DIR/opt/nuv-agent/share/agent.env.example"
 cp "$ROOT_DIR/packaging/systemd/nuv-agent.service" "$PKG_DIR/lib/systemd/system/nuv-agent.service"
 
-ln -s /opt/nuv-agent/venv/bin/nuv-agent "$PKG_DIR/usr/bin/nuv-agent"
+cat > "$PKG_DIR/usr/bin/nuv-agent" <<'SCRIPT'
+#!/usr/bin/env bash
+set -euo pipefail
+export PYTHONNOUSERSITE=1
+exec /opt/nuv-agent/venv/bin/python -s -m nuvion_app.cli "$@"
+SCRIPT
+chmod 0755 "$PKG_DIR/usr/bin/nuv-agent"
 
 chmod 0644 "$PKG_DIR/lib/systemd/system/nuv-agent.service"
 

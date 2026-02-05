@@ -5,7 +5,7 @@ class NuvAgent < Formula
   homepage "https://github.com/plaid-ai/NUV-agent"
   url "__URL__"
   sha256 "__SHA256__"
-  version "0.1.18"
+  version "0.1.19"
   license "Proprietary"
 
   depends_on "python@3.14"
@@ -255,6 +255,7 @@ class NuvAgent < Formula
       "DYLD_LIBRARY_PATH" => "#{HOMEBREW_PREFIX}/lib",
       "GI_TYPELIB_PATH" => "#{HOMEBREW_PREFIX}/lib/girepository-1.0",
       "GST_PLUGIN_PATH" => "#{HOMEBREW_PREFIX}/lib/gstreamer-1.0",
+      "PYTHONNOUSERSITE" => "1",
       "PATH" => "#{HOMEBREW_PREFIX}/bin:#{HOMEBREW_PREFIX}/sbin:/usr/bin:/bin",
     }
     real_bin = libexec/"bin/nuv-agent"
@@ -269,6 +270,7 @@ class NuvAgent < Formula
                           DYLD_LIBRARY_PATH: "#{HOMEBREW_PREFIX}/lib",
                           GI_TYPELIB_PATH: "#{HOMEBREW_PREFIX}/lib/girepository-1.0",
                           GST_PLUGIN_PATH: "#{HOMEBREW_PREFIX}/lib/gstreamer-1.0",
+                          PYTHONNOUSERSITE: "1",
                           PATH: "#{HOMEBREW_PREFIX}/bin:#{HOMEBREW_PREFIX}/sbin:/usr/bin:/bin"
     log_path var/"log/nuv-agent.log"
     error_log_path var/"log/nuv-agent.log"

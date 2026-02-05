@@ -7,6 +7,7 @@ Wants=network-online.target
 Type=simple
 Environment=NUV_AGENT_CONFIG=/etc/nuv-agent/agent.env
 Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONNOUSERSITE=1
 Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 ExecStart=/usr/bin/nuv-agent run
 Restart=always
