@@ -9,6 +9,10 @@ Environment=NUV_AGENT_CONFIG=/etc/nuv-agent/agent.env
 Environment=PYTHONUNBUFFERED=1
 Environment=PYTHONNOUSERSITE=1
 Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+PermissionsStartOnly=true
+ExecStartPre=/bin/mkdir -p /tmp/nuvion_clips/segments /tmp/nuvion_clips/clips
+ExecStartPre=/bin/chmod 1777 /tmp/nuvion_clips
+ExecStartPre=/bin/chmod 0777 /tmp/nuvion_clips/segments /tmp/nuvion_clips/clips
 ExecStart=/usr/bin/nuv-agent run
 Restart=always
 RestartSec=3

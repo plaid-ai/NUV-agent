@@ -126,19 +126,59 @@ auth_token_lock = threading.Lock()
 
 CLIP_SEGMENTS_DIR = os.path.join(CLIP_OUTPUT_DIR, "segments")
 CLIP_CLIPS_DIR = os.path.join(CLIP_OUTPUT_DIR, "clips")
-if CLIP_ENABLED:
-    os.makedirs(CLIP_SEGMENTS_DIR, exist_ok=True)
-    os.makedirs(CLIP_CLIPS_DIR, exist_ok=True)
-    clip_base_mode = 0o1777 if CLIP_OUTPUT_DIR.startswith(("/tmp", "/var/tmp")) else 0o770
+
+
+def _ensure_clip_dirs() -> None:
+    global CLIP_OUTPUT_DIR, CLIP_SEGMENTS_DIR, CLIP_CLIPS_DIR
+    if not CLIP_ENABLED:
+        return
+
+    def init_dirs(base_dir: str) -> tuple[str, str]:
+        segments = os.path.join(base_dir, "segments")
+        clips = os.path.join(base_dir, "clips")
+        os.makedirs(segments, exist_ok=True)
+        os.makedirs(clips, exist_ok=True)
+        return segments, clips
+
+    def touch_test(path: str) -> bool:
+        test_path = os.path.join(path, ".write_test")
+        try:
+            with open(test_path, "w") as handle:
+                handle.write("1")
+            os.remove(test_path)
+            return True
+        except OSError:
+            return False
+
     try:
-        os.chmod(CLIP_OUTPUT_DIR, clip_base_mode)
-    except OSError:
-        pass
-    try:
-        os.chmod(CLIP_SEGMENTS_DIR, 0o777)
-        os.chmod(CLIP_CLIPS_DIR, 0o777)
-    except OSError:
-        pass
+        CLIP_SEGMENTS_DIR, CLIP_CLIPS_DIR = init_dirs(CLIP_OUTPUT_DIR)
+        if not touch_test(CLIP_SEGMENTS_DIR):
+            raise PermissionError
+        clip_base_mode = 0o1777 if CLIP_OUTPUT_DIR.startswith(("/tmp", "/var/tmp")) else 0o770
+        try:
+            os.chmod(CLIP_OUTPUT_DIR, clip_base_mode)
+        except OSError:
+            pass
+        try:
+            os.chmod(CLIP_SEGMENTS_DIR, 0o777)
+            os.chmod(CLIP_CLIPS_DIR, 0o777)
+        except OSError:
+            pass
+        return
+    except PermissionError:
+        fallback_dir = f"/tmp/nuvion_clips_{os.getuid()}"
+        log.warning(
+            "[CLIP] No write access to %s. Falling back to %s",
+            CLIP_OUTPUT_DIR,
+            fallback_dir,
+        )
+        CLIP_OUTPUT_DIR = fallback_dir
+        CLIP_SEGMENTS_DIR, CLIP_CLIPS_DIR = init_dirs(CLIP_OUTPUT_DIR)
+    except Exception as exc:
+        log.warning("[CLIP] Failed to initialize clip dirs: %s", exc)
+
+
+_ensure_clip_dirs()
 
 _FFMPEG_PATH: str | None = None
 
