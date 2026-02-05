@@ -32,7 +32,7 @@ fi
 if command -v python3 >/dev/null 2>&1; then
   python3 -m venv --clear --system-site-packages /opt/nuv-agent/venv
   /opt/nuv-agent/venv/bin/pip install --no-cache-dir --upgrade pip >/dev/null
-  /opt/nuv-agent/venv/bin/pip install --no-cache-dir --upgrade /opt/nuv-agent/src >/dev/null
+  /opt/nuv-agent/venv/bin/pip install --no-cache-dir --upgrade "/opt/nuv-agent/src[zsad]" >/dev/null
 fi
 
 systemctl daemon-reload || true

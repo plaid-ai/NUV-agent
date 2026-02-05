@@ -91,7 +91,7 @@ PRODUCTION_CONFIDENCE_THRESHOLD = parse_float(os.getenv("NUVION_PRODUCTION_CONFI
 ANOMALY_MIN_INTERVAL_SEC = parse_float(os.getenv("NUVION_ANOMALY_MIN_INTERVAL_SEC"), 5.0)
 PRODUCTION_DEDUP_SEC = parse_float(os.getenv("NUVION_PRODUCTION_DEDUP_SEC"), 3.0)
 
-ZERO_SHOT_ENABLED = os.getenv("NUVION_ZERO_SHOT_ENABLED", "false").lower() in ("1", "true", "yes")
+ZERO_SHOT_ENABLED = os.getenv("NUVION_ZERO_SHOT_ENABLED", "true").lower() in ("1", "true", "yes")
 ZERO_SHOT_MODEL = os.getenv("NUVION_ZERO_SHOT_MODEL", "google/siglip2-base-patch16-224")
 ZERO_SHOT_LABELS = parse_csv(os.getenv("NUVION_ZERO_SHOT_LABELS", "normal,defect"))
 ZERO_SHOT_ANOMALY_LABELS = parse_csv(os.getenv("NUVION_ZERO_SHOT_ANOMALY_LABELS", "defect,broken,crack,scratch"))
