@@ -111,6 +111,7 @@ macOS note: use `NUVION_VIDEO_SOURCE=avf` (default camera) or `avf:<index>` to s
 Optional deps:
 - Zero-shot: `pip install -e .[zsad]`
 - Triton: `pip install -e .[triton]`
+- `zsad` extras pins `transformers<5` for SigLIP2 runtime compatibility.
 
 ## Macbook MPS demo (SigLIP2 ZSAD)
 ```bash

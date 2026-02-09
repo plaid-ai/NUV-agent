@@ -5,6 +5,62 @@ log = logging.getLogger(__name__)
 
 
 class ZeroShotAnomalyDetector:
+    @staticmethod
+    def _format_exc(exc: Exception) -> str:
+        return f"{exc.__class__.__name__}: {exc}"
+
+    def _load_processor(self, transformers):
+        attempts: list[str] = []
+
+        AutoProcessor = getattr(transformers, "AutoProcessor", None)
+        if AutoProcessor is not None:
+            try:
+                return AutoProcessor.from_pretrained(self.model_name)
+            except Exception as exc:
+                attempts.append(f"AutoProcessor.from_pretrained failed ({self._format_exc(exc)})")
+
+        for class_name in ("Siglip2Processor", "SiglipProcessor"):
+            processor_cls = getattr(transformers, class_name, None)
+            if processor_cls is None:
+                continue
+            try:
+                return processor_cls.from_pretrained(self.model_name)
+            except Exception as exc:
+                attempts.append(f"{class_name}.from_pretrained failed ({self._format_exc(exc)})")
+
+        image_processor = None
+        tokenizer = None
+        processor_cls = getattr(transformers, "Siglip2Processor", None) or getattr(transformers, "SiglipProcessor", None)
+
+        for class_name in ("SiglipImageProcessor", "AutoImageProcessor"):
+            image_processor_cls = getattr(transformers, class_name, None)
+            if image_processor_cls is None:
+                continue
+            try:
+                image_processor = image_processor_cls.from_pretrained(self.model_name)
+                break
+            except Exception as exc:
+                attempts.append(f"{class_name}.from_pretrained failed ({self._format_exc(exc)})")
+
+        for class_name in ("GemmaTokenizerFast", "GemmaTokenizer", "AutoTokenizer"):
+            tokenizer_cls = getattr(transformers, class_name, None)
+            if tokenizer_cls is None:
+                continue
+            try:
+                tokenizer = tokenizer_cls.from_pretrained(self.model_name)
+                break
+            except Exception as exc:
+                attempts.append(f"{class_name}.from_pretrained failed ({self._format_exc(exc)})")
+
+        if processor_cls is not None and image_processor is not None and tokenizer is not None:
+            try:
+                return processor_cls(image_processor=image_processor, tokenizer=tokenizer)
+            except Exception as exc:
+                attempts.append(f"{processor_cls.__name__}(image_processor, tokenizer) failed ({self._format_exc(exc)})")
+
+        details = "; ".join(attempts) if attempts else "processor class not found"
+        raise RuntimeError(f"Unable to initialize processor for '{self.model_name}': {details}")
+
     def __init__(
         self,
         enabled: bool,
@@ -40,7 +96,6 @@ class ZeroShotAnomalyDetector:
             return
 
         AutoModel = getattr(transformers, "AutoModel", None)
-        AutoProcessor = getattr(transformers, "AutoProcessor", None)
         if AutoModel is None:
             log.warning("Zero-shot dependencies not available: transformers AutoModel missing")
             self.enabled = False
@@ -54,14 +109,7 @@ class ZeroShotAnomalyDetector:
 
         try:
             self._model = AutoModel.from_pretrained(self.model_name).to(device).eval()
-            if AutoProcessor is not None:
-                self._processor = AutoProcessor.from_pretrained(self.model_name)
-            else:
-                from transformers import SiglipImageProcessor, GemmaTokenizerFast, SiglipProcessor
-                image_processor = SiglipImageProcessor.from_pretrained(self.model_name)
-                tokenizer = GemmaTokenizerFast.from_pretrained(self.model_name)
-                self._processor = SiglipProcessor(image_processor=image_processor, tokenizer=tokenizer)
-                log.info("Used manual SiglipProcessor construction (transformers compat fallback)")
+            self._processor = self._load_processor(transformers)
             self._torch = torch
             self._Image = Image
             self._device = device

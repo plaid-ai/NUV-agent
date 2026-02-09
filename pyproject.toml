@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "nuv-agent"
-version = "0.1.21"
+version = "0.1.22"
 description = "Nuvion on-device agent"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -20,7 +20,7 @@ dependencies = [
 [project.optional-dependencies]
 zsad = [
   "torch>=2.1.0",
-  "transformers>=4.40.0",
+  "transformers>=4.40.0,<5.0.0",
   "Pillow>=10.0.0",
   "sentencepiece",
   "protobuf",
