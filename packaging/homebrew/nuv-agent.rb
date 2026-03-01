@@ -5,7 +5,7 @@ class NuvAgent < Formula
   homepage "https://github.com/plaid-ai/NUV-agent"
   url "__URL__"
   sha256 "__SHA256__"
-  version "0.1.25"
+  version "0.1.26"
   license "Proprietary"
 
   depends_on "python@3.14"
@@ -139,6 +139,26 @@ class NuvAgent < Formula
     sha256 "63cf8bbe7522de3bf65932fda1d9c2772064ffb3dae62d55932da54b31cb6c86"
   end
 
+  resource "brotli" do
+    url "https://files.pythonhosted.org/packages/17/e1/298c2ddf786bb7347a1cd71d63a347a79e5712a7c0cba9e3c3458ebd976f/brotli-1.2.0-cp314-cp314-macosx_10_15_universal2.whl"
+    sha256 "6c12dad5cd04530323e723787ff762bac749a7b256a5bece32b2243dd5c27b21"
+  end
+
+  resource "gevent" do
+    url "https://files.pythonhosted.org/packages/15/1a/948f8167b2cdce573cf01cec07afc64d0456dc134b07900b26ac7018b37e/gevent-25.9.1-cp314-cp314-macosx_11_0_universal2.whl"
+    sha256 "1a3fe4ea1c312dbf6b375b416925036fe79a40054e6bf6248ee46526ea628be1"
+  end
+
+  resource "geventhttpclient" do
+    url "https://files.pythonhosted.org/packages/c6/bd/78949448d1a6874c2b183bbf60ed570527b30cdfbbe0fb8252ddc441fa41/geventhttpclient-2.3.8-cp314-cp314-macosx_11_0_arm64.whl"
+    sha256 "39da3e44a92ee896bd78414023f547c3481861e90181d18e8a85ca030735b0d3"
+  end
+
+  resource "greenlet" do
+    url "https://files.pythonhosted.org/packages/3f/ae/8bffcbd373b57a5992cd077cbe8858fff39110480a9d50697091faea6f39/greenlet-3.3.2-cp314-cp314-macosx_11_0_universal2.whl"
+    sha256 "8d1658d7291f9859beed69a776c10822a0a799bc4bfe1bd4272bb60e62507dab"
+  end
+
   resource "hf-xet" do
     url "https://files.pythonhosted.org/packages/7f/8c/c5becfa53234299bc2210ba314eaaae36c2875e0045809b82e40a9544f0c/hf_xet-1.2.0-cp37-abi3-macosx_11_0_arm64.whl"
     sha256 "27df617a076420d8845bea087f59303da8be17ed7ec0cd7ee3b9b9f579dff0e4"
@@ -189,9 +209,19 @@ class NuvAgent < Formula
     sha256 "3413c2ae377550f5487991d444428f1a8ae92784aac79caa8b1e3b89b175f77e"
   end
 
+  resource "opencv-python" do
+    url "https://files.pythonhosted.org/packages/fc/6f/5a28fef4c4a382be06afe3938c64cc168223016fa520c5abaf37e8862aa5/opencv_python-4.13.0.92-cp37-abi3-macosx_13_0_arm64.whl"
+    sha256 "caf60c071ec391ba51ed00a4a920f996d0b64e3e46068aac1f646b5de0326a19"
+  end
+
   resource "pyyaml" do
     url "https://files.pythonhosted.org/packages/bd/9c/4d95bb87eb2063d20db7b60faa3840c1b18025517ae857371c4dd55a6b3a/pyyaml-6.0.3-cp314-cp314-macosx_11_0_arm64.whl"
     sha256 "34d5fcd24b8445fadc33f9cf348c1047101756fd760b4dacb5c3e99755703310"
+  end
+
+  resource "python-rapidjson" do
+    url "https://files.pythonhosted.org/packages/18/5c/e33de01ce1476debf5c1acf9bfafcdcaeaef37834e3e6f723d15e1c481bb/python_rapidjson-1.23-cp314-cp314-macosx_11_0_arm64.whl"
+    sha256 "3dcea6b19b3eee6a9dc5d8c1a20c828fa18d9d265893ce4c1858e8a85af944aa"
   end
 
   resource "requests" do
@@ -239,6 +269,11 @@ class NuvAgent < Formula
     sha256 "ee1e4c0e59148062281c49d80b25b67771a127c85fc9676d3be5f243206826bf"
   end
 
+  resource "tritonclient" do
+    url "https://files.pythonhosted.org/packages/15/89/75166c9b025bcdd0e86dc342ea590999be36078c2125d78b97a3c471db76/tritonclient-2.65.0-py3-none-any.whl"
+    sha256 "cc3e58cf24a5f53fe24066e2037756560f6fdd2743a9d19fbb641b7580a63b4f"
+  end
+
   resource "transformers" do
     url "https://files.pythonhosted.org/packages/71/d3/c16c3b3cf7655a67db1144da94b021c200ac1303f82428f2beef6c2e72bb/transformers-4.57.1-py3-none-any.whl"
     sha256 "b10d05da8fa67dc41644dbbf9bc45a44cb86ae33da6f9295f5fbf5b7890bd267"
@@ -247,6 +282,16 @@ class NuvAgent < Formula
   resource "typer-slim" do
     url "https://files.pythonhosted.org/packages/c8/0a/4aca634faf693e33004796b6cee0ae2e1dba375a800c16ab8d3eff4bb800/typer_slim-0.21.1-py3-none-any.whl"
     sha256 "6e6c31047f171ac93cc5a973c9e617dbc5ab2bddc4d0a3135dc161b4e2020e0d"
+  end
+
+  resource "zope-event" do
+    url "https://files.pythonhosted.org/packages/c2/b0/956902e5e1302f8c5d124e219c6bf214e2649f92ad5fce85b05c039a04c9/zope_event-6.1-py3-none-any.whl"
+    sha256 "0ca78b6391b694272b23ec1335c0294cc471065ed10f7f606858fc54566c25a0"
+  end
+
+  resource "zope-interface" do
+    url "https://files.pythonhosted.org/packages/00/7f/62d00ec53f0a6e5df0c984781e6f3999ed265129c4c3413df8128d1e0207/zope_interface-8.2-cp314-cp314-macosx_11_0_arm64.whl"
+    sha256 "a87fc7517f825a97ff4a4ca4c8a950593c59e0f8e7bfe1b6f898a38d5ba9f9cf"
   end
 
   def install
