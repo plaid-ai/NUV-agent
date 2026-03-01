@@ -53,6 +53,19 @@ Profiles:
 - `light`: text features/metadata 중심의 경량 다운로드
 - `full`: 저장소 전체 다운로드
 
+## Pull model bundle (GCS, no HF key)
+운영 환경에서는 HF 토큰 없이 GCS pointer를 통해 모델을 받을 수 있습니다.
+```bash
+nuv-agent pull-model \
+  --source gcs \
+  --gcs-pointer-uri gs://nuv-model/pointers/anomalyclip/prod.json \
+  --profile runtime
+```
+
+기본값:
+- `NUVION_MODEL_SOURCE=hf` (원하면 `gcs`로 변경)
+- `NUVION_MODEL_GCS_POINTER_URI=gs://nuv-model/pointers/anomalyclip/prod.json`
+
 ## macOS dev setup (Homebrew)
 Recommended for local runs on Apple Silicon.
 ```bash
@@ -117,7 +130,9 @@ For dev, `.env` in the repo is used automatically.
 - `NUVION_ZERO_SHOT_ENABLED`: enable optional zero-shot anomaly detection (requires model deps)
 - `NUVION_ZSAD_BACKEND`: `siglip` 또는 `triton`
  - 기본 ZSAD 모델: `google/siglip2-base-patch16-224`
+- `NUVION_MODEL_SOURCE`: 모델 다운로드 소스 (`hf|gcs`)
 - `NUVION_MODEL_REPO_ID`: pull-model 대상 Hugging Face repo (default: `plaidlabs/nuvion-v1`)
+- `NUVION_MODEL_GCS_POINTER_URI`: GCS pointer JSON URI (default: `gs://nuv-model/pointers/anomalyclip/prod.json`)
 - `NUVION_MODEL_PROFILE`: pull-model 프로필 (`runtime|light|full`)
 - `NUVION_MODEL_DIR`: pull-model 기본 저장 루트
 
