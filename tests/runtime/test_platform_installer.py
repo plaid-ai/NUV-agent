@@ -22,6 +22,13 @@ class PlatformInstallerTest(unittest.TestCase):
                     platform_installer.ensure_homebrew_installed()
         self.assertEqual(ctx.exception.code, "brew_install_failed")
 
+    def test_command_exists_uses_augmented_path(self) -> None:
+        with mock.patch.object(platform_installer.Path, "exists", return_value=True):
+            with mock.patch.object(platform_installer.shutil, "which", return_value="/usr/local/bin/docker") as which_mock:
+                self.assertTrue(platform_installer.command_exists("docker"))
+        kwargs = which_mock.call_args.kwargs
+        self.assertIn("/usr/local/bin", kwargs.get("path", ""))
+
 
 if __name__ == "__main__":
     unittest.main()

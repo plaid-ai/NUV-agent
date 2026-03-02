@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import atexit
 import logging
 import os
 import shutil
@@ -17,11 +18,14 @@ from nuvion_app.runtime.docker_manager import (
     remove_container,
     run_triton_container,
     start_container,
+    stop_container,
 )
 from nuvion_app.runtime.errors import BootstrapError
 from nuvion_app.runtime.inference_mode import normalize_backend
 
 log = logging.getLogger(__name__)
+_managed_triton_container: str | None = None
+_atexit_registered = False
 
 
 _FALLBACK_CONFIG = """name: \"image_encoder\"
@@ -45,6 +49,42 @@ def _truthy(value: str | None, default: bool = False) -> bool:
 def _emit_progress(message: str) -> None:
     sys.stderr.write(f"[BOOTSTRAP] {message}\n")
     sys.stderr.flush()
+
+
+def _should_autostop() -> bool:
+    return _truthy(os.getenv("NUVION_TRITON_AUTOSTOP_ON_EXIT"), default=True)
+
+
+def _register_managed_triton_container(container_name: str) -> None:
+    global _managed_triton_container
+    global _atexit_registered
+    if not _should_autostop():
+        return
+    _managed_triton_container = container_name
+    if not _atexit_registered:
+        atexit.register(cleanup_managed_triton, "process_exit")
+        _atexit_registered = True
+
+
+def cleanup_managed_triton(reason: str = "agent_exit") -> None:
+    global _managed_triton_container
+    container_name = _managed_triton_container
+    if not container_name:
+        return
+    _managed_triton_container = None
+
+    if not _should_autostop():
+        return
+
+    try:
+        if not container_exists(container_name):
+            return
+        if container_running(container_name):
+            _emit_progress(f"Triton 컨테이너 자동 종료: {container_name} (reason={reason})")
+            stop_container(container_name)
+            log.info("[BOOTSTRAP] Stopped managed Triton container '%s' (reason=%s)", container_name, reason)
+    except Exception as exc:
+        log.warning("[BOOTSTRAP] Failed to stop managed Triton container '%s': %s", container_name, exc)
 
 
 def _health_ready(host: str, port: int, timeout_sec: int) -> bool:
@@ -135,6 +175,7 @@ def ensure_triton_ready(stage: str, model_dir: Path) -> None:
             start_container(container_name)
             if _health_ready(host, port, timeout_sec=10):
                 _emit_progress("중지된 Triton 컨테이너 재기동 성공")
+                _register_managed_triton_container(container_name)
                 return
             remove_container(container_name)
 
@@ -152,6 +193,7 @@ def ensure_triton_ready(stage: str, model_dir: Path) -> None:
             "triton_health_failed",
             f"Triton health check failed at http://{host}:{port}/v2/health/ready",
         )
+    _register_managed_triton_container(container_name)
 
     log.info("[BOOTSTRAP] Triton is ready (stage=%s, url=%s)", stage, triton_url)
     _emit_progress(f"Triton 준비 완료: {host}:{port}")

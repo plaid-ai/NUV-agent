@@ -13,6 +13,13 @@ from nuvion_app.runtime.errors import BootstrapError
 log = logging.getLogger(__name__)
 
 _HOMEBREW_INSTALL_SCRIPT = "https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh"
+_PATH_HINTS = [
+    "/opt/homebrew/bin",
+    "/opt/homebrew/sbin",
+    "/usr/local/bin",
+    "/usr/local/sbin",
+    "/Applications/Docker.app/Contents/Resources/bin",
+]
 
 
 def _truthy(value: str | None, default: bool = False) -> bool:
@@ -26,8 +33,18 @@ def _emit_progress(message: str) -> None:
     sys.stderr.flush()
 
 
+def _augment_path(path_value: str | None) -> str:
+    current_parts = [part for part in (path_value or "").split(os.pathsep) if part]
+    seen = set(current_parts)
+    for hint in _PATH_HINTS:
+        if Path(hint).exists() and hint not in seen:
+            current_parts.append(hint)
+            seen.add(hint)
+    return os.pathsep.join(current_parts)
+
+
 def command_exists(command: str) -> bool:
-    return shutil.which(command) is not None
+    return shutil.which(command, path=_augment_path(os.environ.get("PATH", ""))) is not None
 
 
 def detect_brew_path() -> str | None:
@@ -51,8 +68,10 @@ def run_command(
     as_root: bool = False,
 ) -> subprocess.CompletedProcess[str]:
     merged_env = os.environ.copy()
+    merged_env["PATH"] = _augment_path(merged_env.get("PATH", ""))
     if env:
         merged_env.update(env)
+        merged_env["PATH"] = _augment_path(merged_env.get("PATH", ""))
 
     final_command = list(command)
     if as_root and os.geteuid() != 0:
