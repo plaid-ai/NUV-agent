@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import os
+import sys
 from typing import Tuple
 from urllib.parse import urlparse
 
@@ -22,6 +23,11 @@ def _truthy(value: str | None, default: bool = False) -> bool:
     if value is None:
         return default
     return value.strip().lower() in {"1", "true", "yes", "y", "on"}
+
+
+def _emit_progress(message: str) -> None:
+    sys.stderr.write(f"[BOOTSTRAP] {message}\n")
+    sys.stderr.flush()
 
 
 def parse_triton_host_port(url: str) -> Tuple[str, int]:
@@ -85,12 +91,14 @@ def _ensure_colima_running() -> None:
 
     status = run_command(["colima", "status"], check=False, capture_output=True)
     if status.returncode == 0:
+        _emit_progress("Colima가 이미 실행 중입니다.")
         return
 
     if not _truthy(os.getenv("NUVION_DOCKER_AUTOSTART"), default=True):
         raise BootstrapError("docker_daemon_unavailable", "Docker daemon is down and autostart is disabled.", retryable=False)
 
     log.info("[BOOTSTRAP] Docker daemon unavailable. Starting Colima fallback.")
+    _emit_progress("Docker daemon이 없어 Colima fallback을 시작합니다.")
     run_command(["colima", "start", "--cpu", "4", "--memory", "8", "--disk", "40"], check=True)
 
 
@@ -110,16 +118,20 @@ def ensure_docker_ready(triton_url: str) -> None:
         _ensure_docker_cli_linux()
 
     if docker_info_ok():
+        _emit_progress("Docker daemon 준비 완료(기존 daemon 사용).")
         return
 
     if os.uname().sysname.lower() == "darwin":
+        _emit_progress("Docker daemon이 없어 Colima 기동을 시도합니다.")
         _ensure_colima_running()
     else:
+        _emit_progress("Linux Docker daemon 기동을 시도합니다.")
         _start_docker_daemon_linux()
         ensure_nvidia_container_toolkit()
 
     if not docker_info_ok():
         raise BootstrapError("docker_daemon_unavailable", "Docker daemon is not available.")
+    _emit_progress("Docker daemon 준비 완료.")
 
 
 def container_exists(name: str) -> bool:

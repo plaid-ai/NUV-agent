@@ -4,6 +4,7 @@ import logging
 import os
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 from typing import Iterable
 
@@ -18,6 +19,11 @@ def _truthy(value: str | None, default: bool = False) -> bool:
     if value is None:
         return default
     return value.strip().lower() in {"1", "true", "yes", "y", "on"}
+
+
+def _emit_progress(message: str) -> None:
+    sys.stderr.write(f"[BOOTSTRAP] {message}\n")
+    sys.stderr.flush()
 
 
 def command_exists(command: str) -> bool:
@@ -70,6 +76,7 @@ def ensure_homebrew_installed() -> str:
         raise BootstrapError("brew_install_failed", "Homebrew is not installed.", retryable=False)
 
     log.info("[BOOTSTRAP] Homebrew missing. Installing Homebrew in non-interactive mode.")
+    _emit_progress("Homebrew가 없어 자동 설치를 시작합니다.")
     try:
         run_command(
             [
@@ -79,7 +86,7 @@ def ensure_homebrew_installed() -> str:
             ],
             env={"NONINTERACTIVE": "1"},
             check=True,
-            capture_output=True,
+            capture_output=False,
         )
     except Exception as exc:
         raise BootstrapError("brew_install_failed", f"Failed to install Homebrew: {exc}") from exc
@@ -101,10 +108,12 @@ def brew_install(packages: Iterable[str]) -> None:
     for package in package_list:
         check_result = run_command([brew_path, "list", package], check=False)
         if check_result.returncode == 0:
+            _emit_progress(f"brew 패키지 이미 설치됨: {package}")
             continue
 
         try:
             log.info("[BOOTSTRAP] Installing package via brew: %s", package)
+            _emit_progress(f"brew install 진행 중: {package}")
             run_command([brew_path, "install", package], check=True)
         except Exception as exc:
             raise BootstrapError("docker_install_failed", f"brew install {package} failed: {exc}") from exc
@@ -116,7 +125,9 @@ def apt_install(packages: Iterable[str]) -> None:
         return
 
     try:
+        _emit_progress("apt update 진행 중...")
         run_command(["apt-get", "update"], as_root=True)
+        _emit_progress(f"apt install 진행 중: {' '.join(package_list)}")
         run_command(["apt-get", "install", "-y", *package_list], as_root=True)
     except Exception as exc:
         raise BootstrapError("docker_install_failed", f"apt install failed: {exc}") from exc
