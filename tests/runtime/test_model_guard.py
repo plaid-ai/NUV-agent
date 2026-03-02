@@ -15,6 +15,18 @@ class ModelGuardTest(unittest.TestCase):
             with mock.patch.dict(os.environ, {"NUVION_TRITON_MAC_PROFILE": "full", "NUVION_MODEL_PROFILE": "runtime"}):
                 self.assertEqual(model_guard.resolve_effective_profile(), "full")
 
+    def test_resolve_effective_profile_linux_defaults_runtime(self) -> None:
+        with mock.patch.object(model_guard, "_is_darwin", return_value=False):
+            with mock.patch.dict(
+                os.environ,
+                {
+                    "NUVION_MODEL_PROFILE": "full",
+                    "NUVION_TRITON_JETSON_PROFILE": "",
+                },
+                clear=False,
+            ):
+                self.assertEqual(model_guard.resolve_effective_profile(), "runtime")
+
     def test_resolve_model_dir_explicit(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             with mock.patch.dict(os.environ, {"NUVION_MODEL_LOCAL_DIR": tmp}):
