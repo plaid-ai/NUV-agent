@@ -33,6 +33,12 @@ curl -fsSL https://apt.plaidai.io/install-apt.sh | bash
 ```
 `nuv-agent setup`/`nuv-agent run` automatically bootstrap Docker/Triton/model bundle when needed.
 
+Config health check / migration:
+```bash
+# 기존 설정 파일을 최신 schema로 자동 보정하고 검증
+nuv-agent doctor --fix
+```
+
 ## Quick start (dev)
 1) Copy `.env.example` to `.env` and fill in credentials.
 2) Run locally:
@@ -198,6 +204,7 @@ For dev, `.env` in the repo is used automatically.
 - `NUVION_MODEL_GCS_POINTER_URI`: GCS pointer JSON URI (default: `gs://nuv-model/pointers/anomalyclip/prod.json`)
 - `NUVION_MODEL_PROFILE`: pull-model 프로필 (`runtime|light|full`)
 - `NUVION_MODEL_DIR`: pull-model 기본 저장 루트
+- `NUVION_CONFIG_SCHEMA_VERSION`: config schema 버전 (`doctor --fix`로 자동 보정)
 - `NUVION_RUNTIME_BOOTSTRAP_ENABLED`: setup/run bootstrap 전체 on/off
 - `NUVION_HOMEBREW_AUTOINSTALL`: macOS Homebrew 자동 설치 허용
 - `NUVION_DOCKER_AUTOINSTALL`: Docker/Colima(또는 docker.io) 자동 설치 허용

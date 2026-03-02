@@ -26,6 +26,7 @@ from nuvion_app.model_store import (
     pull_model_from_server,
     resolve_default_model_dir,
 )
+from nuvion_app.runtime.config_guard import ensure_runtime_config, guard_config, print_report
 from nuvion_app.runtime.inference_mode import normalize_backend, normalize_siglip_device
 
 
@@ -146,6 +147,10 @@ def _build_parser() -> argparse.ArgumentParser:
         help="SigLIP device preference: auto|mps|cuda|cpu",
     )
 
+    doctor_parser = subparsers.add_parser("doctor", help="Validate/migrate agent config")
+    doctor_parser.add_argument("--config", help="Path to config env file")
+    doctor_parser.add_argument("--fix", action="store_true", help="Apply automatic migration fixes")
+
     return parser
 
 
@@ -187,7 +192,8 @@ def main() -> None:
         return
 
     if args.command == "run":
-        load_env(args.config)
+        config_path = resolve_config_path(args.config)
+        load_env(str(config_path))
         if args.backend:
             raw_backend = args.backend.strip().lower()
             os.environ["NUVION_ZSAD_BACKEND"] = normalize_backend(raw_backend, default="triton")
@@ -195,6 +201,14 @@ def main() -> None:
                 os.environ["NUVION_ZERO_SHOT_DEVICE"] = "mps"
         if args.siglip_device:
             os.environ["NUVION_ZERO_SHOT_DEVICE"] = normalize_siglip_device(args.siglip_device, default="auto")
+
+        try:
+            ensure_runtime_config(config_path=config_path, stage="run", apply_fixes=True)
+        except Exception as exc:
+            sys.stderr.write(f"Config preflight failed: {exc}\n")
+            sys.stderr.write("Run `nuv-agent doctor --fix` and retry.\n")
+            sys.exit(2)
+
         from nuvion_app.inference.main import main as run_main
 
         run_main()
@@ -286,6 +300,16 @@ def main() -> None:
         sys.stdout.write(f"  NUVION_ZSAD_BACKEND={values['NUVION_ZSAD_BACKEND']}\n")
         sys.stdout.write(f"  NUVION_ZERO_SHOT_DEVICE={values['NUVION_ZERO_SHOT_DEVICE']}\n")
         return
+
+    if args.command == "doctor":
+        config_path = resolve_config_path(args.config)
+        report = guard_config(config_path=config_path, apply_fixes=args.fix)
+        print_report(report)
+        if report.ok:
+            sys.stdout.write("[DOCTOR] result: OK\n")
+            return
+        sys.stderr.write("[DOCTOR] result: FAILED\n")
+        sys.exit(2)
 
     parser.print_help()
 
