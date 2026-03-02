@@ -57,6 +57,7 @@ nuv-agent pull-model \
 
 - `--access-token`을 직접 전달하거나, 생략 시 `NUVION_DEVICE_USERNAME/NUVION_DEVICE_PASSWORD`로 `/auth/login` 후 presign 호출
 - 다운로드 후 각 artifact에 대해 `sha256` 무결성 검증 수행
+- signed URL 다운로드 중 400/401/403 오류가 발생하면, presign URL을 자동 재발급 받아 이어서 재시도
 - 결과 메타데이터: `metadata/downloaded_from_server.json`
 
 ## Pull model bundle (GCS fallback)

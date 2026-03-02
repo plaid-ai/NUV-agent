@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import os
 import subprocess
 import time
@@ -16,6 +17,9 @@ DEFAULT_MODEL_POINTER = "anomalyclip/prod"
 DEFAULT_MODEL_PRESIGN_TTL_SECONDS = 300
 DEFAULT_MODEL_SERVER_BASE_URL = "https://api.nuvion-dev.plaidai.io"
 DEFAULT_MODEL_GCS_POINTER_URI = "gs://nuv-model/pointers/anomalyclip/prod.json"
+DEFAULT_MODEL_PRESIGN_REFRESH_RETRIES = 2
+
+log = logging.getLogger(__name__)
 
 _PROFILE_KEYS: dict[str, list[str]] = {
     "runtime": ["text_features", "plan", "triton_config", "manifest"],
@@ -159,6 +163,87 @@ def _extract_api_data(payload: dict[str, Any]) -> dict[str, Any]:
     if isinstance(payload.get("data"), dict):
         return payload["data"]
     return payload
+
+
+def _fetch_server_presign(
+    *,
+    base_url: str,
+    token: str,
+    pointer: str,
+    profile: str,
+    ttl_seconds: int,
+) -> dict[str, Any]:
+    request_payload = {
+        "pointer": pointer,
+        "profile": profile,
+        "ttlSeconds": int(ttl_seconds),
+    }
+    headers = {"Authorization": f"Bearer {token}"}
+    response_payload = _http_json(
+        "POST",
+        f"{base_url}/devices/models/presign",
+        payload=request_payload,
+        headers=headers,
+    )
+    return _extract_api_data(response_payload)
+
+
+def _build_artifact_map(data: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    artifacts = data.get("artifacts")
+    if not isinstance(artifacts, list):
+        raise RuntimeError("Server response must include artifacts array")
+
+    artifact_by_key: dict[str, dict[str, Any]] = {}
+    for item in artifacts:
+        if not isinstance(item, dict):
+            continue
+        key = str(item.get("key") or "").strip()
+        if key:
+            artifact_by_key[key] = item
+    return artifact_by_key
+
+
+def _ensure_required_artifacts(
+    *,
+    artifact_by_key: dict[str, dict[str, Any]],
+    profile: str,
+) -> list[str]:
+    required_keys = _PROFILE_KEYS[profile]
+    missing = [key for key in required_keys if key not in artifact_by_key]
+    if missing:
+        raise RuntimeError(
+            f"Presign response is missing required artifacts for profile '{profile}': {', '.join(missing)}"
+        )
+    return required_keys
+
+
+def _is_integrity_error(exc: Exception) -> bool:
+    message = str(exc).lower()
+    return "sha256 mismatch" in message or "size mismatch" in message
+
+
+def _is_signed_url_refresh_error(exc: Exception) -> bool:
+    message = str(exc).lower()
+    tokens = (
+        "http error 400",
+        "http error 401",
+        "http error 403",
+        "signature",
+        "x-goog",
+        "request has expired",
+        "expired",
+    )
+    return any(token in message for token in tokens)
+
+
+def _cleanup_download_target(path: Path) -> None:
+    part_path = path.with_suffix(path.suffix + ".part")
+    for candidate in (path, part_path):
+        try:
+            if candidate.exists():
+                candidate.unlink()
+        except OSError:
+            pass
 
 
 def _login_for_access_token(server_base_url: str, username: str, password: str) -> str:
@@ -358,75 +443,114 @@ def pull_model_from_server(
             password=(password or "").strip(),
         )
 
-    request_payload = {
-        "pointer": normalized_pointer,
-        "profile": profile,
-        "ttlSeconds": int(ttl_seconds),
-    }
-    headers = {"Authorization": f"Bearer {token}"}
-    response_payload = _http_json(
-        "POST",
-        f"{base_url}/devices/models/presign",
-        payload=request_payload,
-        headers=headers,
+    data = _fetch_server_presign(
+        base_url=base_url,
+        token=token,
+        pointer=normalized_pointer,
+        profile=profile,
+        ttl_seconds=ttl_seconds,
     )
-    data = _extract_api_data(response_payload)
-
-    artifacts = data.get("artifacts")
-    if not isinstance(artifacts, list):
-        raise RuntimeError("Server response must include artifacts array")
-
-    artifact_by_key: dict[str, dict[str, Any]] = {}
-    for item in artifacts:
-        if not isinstance(item, dict):
-            continue
-        key = str(item.get("key") or "").strip()
-        if key:
-            artifact_by_key[key] = item
-
-    required_keys = _PROFILE_KEYS[profile]
-    missing = [key for key in required_keys if key not in artifact_by_key]
-    if missing:
-        raise RuntimeError(f"Presign response is missing required artifacts for profile '{profile}': {', '.join(missing)}")
+    artifact_by_key = _build_artifact_map(data)
+    required_keys = _ensure_required_artifacts(artifact_by_key=artifact_by_key, profile=profile)
 
     identifier = f"server:{normalized_pointer}:{profile}"
     target_dir = _resolve_local_dir(identifier=identifier, local_dir=local_dir)
     target_dir.mkdir(parents=True, exist_ok=True)
+    max_refresh_retries = int(
+        os.getenv(
+            "NUVION_MODEL_PRESIGN_REFRESH_RETRIES",
+            str(DEFAULT_MODEL_PRESIGN_REFRESH_RETRIES),
+        )
+    )
+    refresh_attempts = 0
 
     downloaded: list[dict[str, Any]] = []
     for key in required_keys:
-        artifact = artifact_by_key[key]
-        url = str(artifact.get("url") or "").strip()
-        if not url:
-            raise RuntimeError(f"Presign artifact '{key}' is missing url")
+        retried_integrity = False
+        while True:
+            artifact = artifact_by_key[key]
+            url = str(artifact.get("url") or "").strip()
+            if not url:
+                raise RuntimeError(f"Presign artifact '{key}' is missing url")
 
-        path_hint = str(artifact.get("path") or "").strip() or None
-        expected_sha256 = str(artifact.get("sha256") or "").strip()
-        if not expected_sha256:
-            raise RuntimeError(f"Presign artifact '{key}' is missing sha256")
+            path_hint = str(artifact.get("path") or "").strip() or None
+            expected_sha256 = str(artifact.get("sha256") or "").strip()
+            if not expected_sha256:
+                raise RuntimeError(f"Presign artifact '{key}' is missing sha256")
 
-        expected_size: Optional[int] = None
-        size_bytes = artifact.get("sizeBytes")
-        if isinstance(size_bytes, int):
-            expected_size = size_bytes
+            expected_size: Optional[int] = None
+            size_bytes = artifact.get("sizeBytes")
+            if isinstance(size_bytes, int):
+                expected_size = size_bytes
 
-        local_rel = _resolve_local_rel_path(key, path_hint)
-        dst = (target_dir / local_rel).resolve()
+            local_rel = _resolve_local_rel_path(key, path_hint)
+            dst = (target_dir / local_rel).resolve()
 
-        _download_http_file(url=url, dst_path=dst)
-        _validate_download_integrity(dst, expected_sha256, expected_size, key)
+            # Reuse previously downloaded file when it already matches integrity.
+            if dst.exists():
+                try:
+                    _validate_download_integrity(dst, expected_sha256, expected_size, key)
+                    downloaded.append(
+                        {
+                            "key": key,
+                            "url": url,
+                            "dst": str(dst),
+                            "path": path_hint,
+                            "sha256": expected_sha256,
+                            "sizeBytes": expected_size,
+                            "expiresAt": artifact.get("expiresAt"),
+                            "reused": True,
+                        }
+                    )
+                    break
+                except Exception:
+                    _cleanup_download_target(dst)
 
-        downloaded.append(
-            {
-                "key": key,
-                "url": url,
-                "dst": str(dst),
-                "path": path_hint,
-                "sha256": expected_sha256,
-                "sizeBytes": expected_size,
-                "expiresAt": artifact.get("expiresAt"),
-            }
-        )
+            try:
+                _download_http_file(url=url, dst_path=dst)
+                _validate_download_integrity(dst, expected_sha256, expected_size, key)
+                downloaded.append(
+                    {
+                        "key": key,
+                        "url": url,
+                        "dst": str(dst),
+                        "path": path_hint,
+                        "sha256": expected_sha256,
+                        "sizeBytes": expected_size,
+                        "expiresAt": artifact.get("expiresAt"),
+                        "reused": False,
+                    }
+                )
+                break
+            except Exception as exc:
+                _cleanup_download_target(dst)
+
+                if _is_integrity_error(exc) and not retried_integrity:
+                    retried_integrity = True
+                    continue
+
+                if _is_signed_url_refresh_error(exc) and refresh_attempts < max_refresh_retries:
+                    refresh_attempts += 1
+                    log.info(
+                        "[MODEL] refreshing presigned URLs after download failure "
+                        "(attempt=%s/%s, key=%s, error=%s)",
+                        refresh_attempts,
+                        max_refresh_retries,
+                        key,
+                        exc,
+                    )
+                    data = _fetch_server_presign(
+                        base_url=base_url,
+                        token=token,
+                        pointer=normalized_pointer,
+                        profile=profile,
+                        ttl_seconds=ttl_seconds,
+                    )
+                    artifact_by_key = _build_artifact_map(data)
+                    _ensure_required_artifacts(artifact_by_key=artifact_by_key, profile=profile)
+                    continue
+
+                raise
 
     metadata_dir = (target_dir / "metadata").resolve()
     metadata_dir.mkdir(parents=True, exist_ok=True)
