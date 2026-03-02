@@ -41,11 +41,27 @@ curl -fsSL https://apt.plaidai.io/install-apt.sh | bash
 
 Python requirement: 3.10+
 
-## Pull model bundle (GCS bucket)
-GCS pointer를 통해 모델 번들을 내려받아 Triton/AnomalyCLIP 런타임에 바로 연결할 수 있습니다.
+## Pull model bundle (server presign 권장)
+운영 기본 경로는 `NUV-BE` presign API를 통해 signed URL을 받아 모델 번들을 내려받는 방식입니다.
 ```bash
 # runtime: text_features + Triton model_repository (권장)
 nuv-agent pull-model \
+  --source server \
+  --server-base-url https://api.nuvion-dev.plaidai.io \
+  --pointer anomalyclip/prod \
+  --local-dir ~/.cache/nuvion/models/anomalyclip-current \
+  --profile runtime
+```
+
+- `--access-token`을 직접 전달하거나, 생략 시 `NUVION_DEVICE_USERNAME/NUVION_DEVICE_PASSWORD`로 `/auth/login` 후 presign 호출
+- 다운로드 후 각 artifact에 대해 `sha256` 무결성 검증 수행
+- 결과 메타데이터: `metadata/downloaded_from_server.json`
+
+## Pull model bundle (GCS fallback)
+개발/운영 점검용 fallback으로 GCS 직접 pull도 유지됩니다.
+```bash
+nuv-agent pull-model \
+  --source gcs \
   --gcs-pointer-uri gs://nuv-model/pointers/anomalyclip/prod.json \
   --local-dir ~/.cache/nuvion/models/anomalyclip-current \
   --profile runtime
@@ -57,6 +73,10 @@ Profiles:
 - `full`: 추가 분석/검증 파일까지 포함해서 다운로드
 
 기본값:
+- `NUVION_MODEL_SOURCE=server`
+- `NUVION_MODEL_POINTER=anomalyclip/prod`
+- `NUVION_MODEL_PRESIGN_TTL_SECONDS=300`
+- `NUVION_MODEL_SERVER_BASE_URL=https://api.nuvion-dev.plaidai.io`
 - `NUVION_MODEL_GCS_POINTER_URI=gs://nuv-model/pointers/anomalyclip/prod.json`
 - `NUVION_MODEL_PROFILE=runtime`
 - `NUVION_MODEL_LOCAL_DIR=~/.cache/nuvion/models/anomalyclip-current`
@@ -146,6 +166,11 @@ For dev, `.env` in the repo is used automatically.
 - `NUVION_ZERO_SHOT_ENABLED`: enable optional zero-shot anomaly detection (requires model deps)
 - `NUVION_ZSAD_BACKEND`: 기본 `triton` (장애 대응 시 `siglip`로 수동 전환 가능)
 - `NUVION_ZERO_SHOT_MODEL`: 기본 ZSAD 모델 (`google/siglip2-base-patch16-224`)
+- `NUVION_MODEL_SOURCE`: `server`(권장) | `gcs`(fallback)
+- `NUVION_MODEL_POINTER`: server source에서 사용할 pointer (`anomalyclip/prod`)
+- `NUVION_MODEL_PRESIGN_TTL_SECONDS`: server source presign 요청 TTL
+- `NUVION_MODEL_SERVER_BASE_URL`: server source presign API base URL
+- `NUVION_MODEL_SERVER_ACCESS_TOKEN`: server source에서 사용할 사전 발급 토큰(선택)
 - `NUVION_MODEL_GCS_POINTER_URI`: GCS pointer JSON URI (default: `gs://nuv-model/pointers/anomalyclip/prod.json`)
 - `NUVION_MODEL_PROFILE`: pull-model 프로필 (`runtime|light|full`)
 - `NUVION_MODEL_DIR`: pull-model 기본 저장 루트
