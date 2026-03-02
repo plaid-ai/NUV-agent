@@ -42,6 +42,7 @@ EXTRAS=zsad ./build-deb.sh
 - `packaging/release/build-sdist.sh`: build source tarball and print SHA256.
 - `packaging/release/update-homebrew-formula.sh`: inject URL/SHA/version into formula.
 - `packaging/release/bootstrap-homebrew-tap.sh`: create and seed the tap repo.
+- `packaging/release/promote-model-pointer.sh`: promote model channel pointer (`canary.json`/`prod.json`) in GCS.
 - `packaging/apt/`: minimal `aptly` repo flow (GCS recommended).
 
 ## GitHub Actions release

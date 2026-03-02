@@ -6,25 +6,8 @@ import subprocess
 from pathlib import Path
 from typing import Optional
 
-DEFAULT_MODEL_SOURCE = "hf"
-DEFAULT_MODEL_REPO_ID = "plaidlabs/nuvion-v1"
 DEFAULT_MODEL_PROFILE = "runtime"
 DEFAULT_MODEL_GCS_POINTER_URI = "gs://nuv-model/pointers/anomalyclip/prod.json"
-
-_HF_PROFILE_ALLOW_PATTERNS: dict[str, list[str] | None] = {
-    "full": None,
-    "runtime": [
-        "README.md",
-        "metadata/**",
-        "onnx/text_features.npy",
-        "triton/model_repository/**",
-    ],
-    "light": [
-        "README.md",
-        "metadata/**",
-        "onnx/text_features.npy",
-    ],
-}
 
 
 _GCS_PROFILE_KEYS: dict[str, list[str]] = {
@@ -67,44 +50,10 @@ def _resolve_local_dir(identifier: str, local_dir: Optional[str]) -> Path:
 
 
 def _ensure_profile(profile: str) -> None:
-    valid = set(_HF_PROFILE_ALLOW_PATTERNS.keys())
+    valid = set(_GCS_PROFILE_KEYS.keys())
     if profile not in valid:
         allowed = ", ".join(sorted(valid))
         raise ValueError(f"Unsupported profile '{profile}'. Expected one of: {allowed}")
-
-
-def pull_model_snapshot(
-    repo_id: str,
-    revision: Optional[str] = None,
-    local_dir: Optional[str] = None,
-    token: Optional[str] = None,
-    profile: str = DEFAULT_MODEL_PROFILE,
-) -> Path:
-    _ensure_profile(profile)
-
-    try:
-        from huggingface_hub import snapshot_download
-    except Exception as exc:  # pragma: no cover
-        raise RuntimeError(
-            "huggingface_hub is required for 'pull-model'. Install with: pip install huggingface_hub"
-        ) from exc
-
-    target_dir = _resolve_local_dir(identifier=repo_id, local_dir=local_dir)
-    target_dir.mkdir(parents=True, exist_ok=True)
-
-    kwargs: dict[str, object] = {
-        "repo_id": repo_id,
-        "repo_type": "model",
-        "local_dir": str(target_dir),
-        "allow_patterns": _HF_PROFILE_ALLOW_PATTERNS[profile],
-    }
-    if revision:
-        kwargs["revision"] = revision
-    if token:
-        kwargs["token"] = token
-
-    snapshot_path = snapshot_download(**kwargs)
-    return Path(snapshot_path).resolve()
 
 
 def _run_command(cmd: list[str], capture_output: bool = False) -> subprocess.CompletedProcess[str]:
