@@ -41,30 +41,23 @@ curl -fsSL https://apt.plaidai.io/install-apt.sh | bash
 
 Python requirement: 3.10+
 
-## Pull model bundle (Hugging Face)
-`plaidlabs/nuvion-v1` 모델 번들을 내려받아 Triton/AnomalyCLIP 런타임에 바로 연결할 수 있습니다.
+## Pull model bundle (GCS bucket)
+GCS pointer를 통해 모델 번들을 내려받아 Triton/AnomalyCLIP 런타임에 바로 연결할 수 있습니다.
 ```bash
 # runtime: text_features + Triton model_repository (권장)
-nuv-agent pull-model --repo-id plaidlabs/nuvion-v1 --profile runtime
+nuv-agent pull-model \
+  --gcs-pointer-uri gs://nuv-model/pointers/anomalyclip/prod.json \
+  --profile runtime
 ```
 
 Profiles:
 - `runtime`: Triton + text features 실행에 필요한 파일만 다운로드
 - `light`: text features/metadata 중심의 경량 다운로드
-- `full`: 저장소 전체 다운로드
-
-## Pull model bundle (GCS, no HF key)
-운영 환경에서는 HF 토큰 없이 GCS pointer를 통해 모델을 받을 수 있습니다.
-```bash
-nuv-agent pull-model \
-  --source gcs \
-  --gcs-pointer-uri gs://nuv-model/pointers/anomalyclip/prod.json \
-  --profile runtime
-```
+- `full`: 추가 분석/검증 파일까지 포함해서 다운로드
 
 기본값:
-- `NUVION_MODEL_SOURCE=hf` (원하면 `gcs`로 변경)
 - `NUVION_MODEL_GCS_POINTER_URI=gs://nuv-model/pointers/anomalyclip/prod.json`
+- `NUVION_MODEL_PROFILE=runtime`
 
 ## macOS dev setup (Homebrew)
 Recommended for local runs on Apple Silicon.
@@ -129,9 +122,7 @@ For dev, `.env` in the repo is used automatically.
 - `NUVION_PRODUCTION_LABELS`: comma-separated labels counted for production
 - `NUVION_ZERO_SHOT_ENABLED`: enable optional zero-shot anomaly detection (requires model deps)
 - `NUVION_ZSAD_BACKEND`: `siglip` 또는 `triton`
- - 기본 ZSAD 모델: `google/siglip2-base-patch16-224`
-- `NUVION_MODEL_SOURCE`: 모델 다운로드 소스 (`hf|gcs`)
-- `NUVION_MODEL_REPO_ID`: pull-model 대상 Hugging Face repo (default: `plaidlabs/nuvion-v1`)
+- `NUVION_ZERO_SHOT_MODEL`: 기본 ZSAD 모델 (`google/siglip2-base-patch16-224`)
 - `NUVION_MODEL_GCS_POINTER_URI`: GCS pointer JSON URI (default: `gs://nuv-model/pointers/anomalyclip/prod.json`)
 - `NUVION_MODEL_PROFILE`: pull-model 프로필 (`runtime|light|full`)
 - `NUVION_MODEL_DIR`: pull-model 기본 저장 루트
@@ -167,7 +158,8 @@ export NUVION_TRITON_MODE=anomalyclip
 export NUVION_TRITON_MODEL=image_encoder
 export NUVION_TRITON_INPUT=images
 export NUVION_TRITON_IMAGE_FEATURES_OUTPUT=image_features
-export NUVION_TRITON_TEXT_FEATURES=$HOME/.cache/nuvion/models/plaidlabs__nuvion-v1/onnx/text_features.npy
+# pull-model을 --local-dir ~/.cache/nuvion/models/anomalyclip-v1 로 실행했다고 가정
+export NUVION_TRITON_TEXT_FEATURES=$HOME/.cache/nuvion/models/anomalyclip-v1/onnx/text_features.npy
 export NUVION_TRITON_THRESHOLD=0.7
 ```
 
