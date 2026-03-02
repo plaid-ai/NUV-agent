@@ -37,6 +37,7 @@ REQUIRED_KEYS = {
 PLACEHOLDER_VALUES = {"***"}
 
 _LOADED = False
+_LOADED_PATH: Optional[Path] = None
 
 
 def _is_placeholder(value: Optional[str]) -> bool:
@@ -137,12 +138,17 @@ def resolve_config_path(explicit: Optional[str] = None) -> Path:
 
 def load_env(path: Optional[str] = None) -> Path:
     global _LOADED
-    if _LOADED:
-        return resolve_config_path(path)
+    global _LOADED_PATH
     config_path = resolve_config_path(path)
-    os.environ.setdefault("NUV_AGENT_CONFIG", str(config_path))
-    load_dotenv(config_path, override=False)
+    if _LOADED and _LOADED_PATH == config_path:
+        return config_path
+
+    override = _LOADED and _LOADED_PATH is not None and _LOADED_PATH != config_path
+    os.environ["NUV_AGENT_CONFIG"] = str(config_path)
+    load_dotenv(config_path, override=override)
+
     _LOADED = True
+    _LOADED_PATH = config_path
     return config_path
 
 
@@ -1387,8 +1393,10 @@ def setup_config(
         for key, value in read_env(path).items():
             os.environ[key] = value
 
+        from nuvion_app.runtime.config_guard import ensure_runtime_config
         from nuvion_app.runtime.bootstrap import ensure_ready
 
+        ensure_runtime_config(config_path=path, stage="setup", apply_fixes=True)
         ready = ensure_ready(stage="setup")
         if ready:
             print("Runtime bootstrap: ready")
