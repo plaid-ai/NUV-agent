@@ -379,17 +379,209 @@ def _has_display() -> bool:
     return bool(os.getenv("DISPLAY") or os.getenv("WAYLAND_DISPLAY"))
 
 
+def _field_group(key: str) -> str:
+    if key.startswith("NUVION_TRITON_"):
+        return "triton"
+    if key.startswith("NUVION_ZERO_SHOT_"):
+        return "siglip"
+    return "general"
+
+
+def _collect_env_overrides(fields: List[Dict[str, str]], values: Dict[str, str]) -> Dict[str, str]:
+    overrides: Dict[str, str] = {}
+    for field in fields:
+        key = field["key"]
+        env_value = os.getenv(key)
+        if env_value is None:
+            continue
+        file_value = values.get(key, "")
+        if env_value != file_value:
+            overrides[key] = env_value
+    return overrides
+
+
+def _parse_triton_health_url(triton_url: str) -> str:
+    candidate = (triton_url or "localhost:8000").strip()
+    if "://" not in candidate:
+        candidate = f"http://{candidate}"
+    parsed = urllib.parse.urlparse(candidate)
+    scheme = parsed.scheme or "http"
+    host = parsed.hostname or "localhost"
+    port = parsed.port or (443 if scheme == "https" else 8000)
+    return f"{scheme}://{host}:{port}/v2/health/ready"
+
+
+def _check_server_login(values: Dict[str, str]) -> Dict[str, str]:
+    base_url = (values.get("NUVION_SERVER_BASE_URL") or "").strip()
+    username = (values.get("NUVION_DEVICE_USERNAME") or "").strip()
+    password = values.get("NUVION_DEVICE_PASSWORD") or ""
+    if not base_url or not username or not password or _is_placeholder(password):
+        return {
+            "name": "Server login",
+            "status": "warn",
+            "detail": "NUVION_SERVER_BASE_URL / device credentials are required.",
+        }
+    token = _login_user(base_url, username, password)
+    if token:
+        return {
+            "name": "Server login",
+            "status": "pass",
+            "detail": "Device credentials can obtain auth token.",
+        }
+    return {
+        "name": "Server login",
+        "status": "fail",
+        "detail": "Failed to login with NUVION_DEVICE_USERNAME/NUVION_DEVICE_PASSWORD.",
+    }
+
+
+def _check_triton_health(values: Dict[str, str]) -> Dict[str, str]:
+    backend = (values.get("NUVION_ZSAD_BACKEND") or "triton").strip().lower()
+    if backend not in {"triton"}:
+        return {
+            "name": "Triton health",
+            "status": "skip",
+            "detail": f"Skipped because backend={backend}.",
+        }
+    health_url = _parse_triton_health_url(values.get("NUVION_TRITON_URL") or "localhost:8000")
+    req = urllib.request.Request(health_url, method="GET")
+    try:
+        with urllib.request.urlopen(req, timeout=3) as response:
+            if 200 <= response.getcode() < 300:
+                return {
+                    "name": "Triton health",
+                    "status": "pass",
+                    "detail": f"Ready endpoint reachable: {health_url}",
+                }
+    except Exception as exc:
+        return {
+            "name": "Triton health",
+            "status": "fail",
+            "detail": f"Health check failed: {exc}",
+        }
+    return {
+        "name": "Triton health",
+        "status": "fail",
+        "detail": f"Unexpected status from {health_url}",
+    }
+
+
+def _check_camera_source(values: Dict[str, str]) -> Dict[str, str]:
+    source = (values.get("NUVION_VIDEO_SOURCE") or "").strip()
+    if not source:
+        return {
+            "name": "Camera source",
+            "status": "warn",
+            "detail": "NUVION_VIDEO_SOURCE is empty.",
+        }
+    if sys.platform == "darwin":
+        if source.startswith("avf"):
+            return {
+                "name": "Camera source",
+                "status": "pass",
+                "detail": f"macOS AVFoundation source configured: {source}",
+            }
+        if source.startswith("/dev/"):
+            return {
+                "name": "Camera source",
+                "status": "warn",
+                "detail": f"macOS usually expects avf/avf:<index>, current={source}",
+            }
+        return {
+            "name": "Camera source",
+            "status": "warn",
+            "detail": f"Unrecognized macOS source format: {source}",
+        }
+    if source == "rpi":
+        return {
+            "name": "Camera source",
+            "status": "pass",
+            "detail": "Raspberry Pi camera source selected.",
+        }
+    if source.startswith("/dev/"):
+        if Path(source).exists():
+            return {
+                "name": "Camera source",
+                "status": "pass",
+                "detail": f"Device path exists: {source}",
+            }
+        return {
+            "name": "Camera source",
+            "status": "fail",
+            "detail": f"Device path not found: {source}",
+        }
+    return {
+        "name": "Camera source",
+        "status": "warn",
+        "detail": f"Custom source configured: {source}",
+    }
+
+
+def _check_rtp_target(values: Dict[str, str]) -> Dict[str, str]:
+    rtp_ip = (values.get("NUVION_RTP_REMOTE_IP") or "").strip()
+    if not rtp_ip:
+        return {
+            "name": "RTP target",
+            "status": "warn",
+            "detail": "NUVION_RTP_REMOTE_IP is empty.",
+        }
+    try:
+        resolved = socket.gethostbyname(rtp_ip)
+    except Exception as exc:
+        return {
+            "name": "RTP target",
+            "status": "fail",
+            "detail": f"Failed to resolve host '{rtp_ip}': {exc}",
+        }
+    return {
+        "name": "RTP target",
+        "status": "pass",
+        "detail": f"Host resolves to {resolved}.",
+    }
+
+
+def _run_preflight(values: Dict[str, str]) -> Dict[str, object]:
+    checks = [
+        _check_server_login(values),
+        _check_triton_health(values),
+        _check_camera_source(values),
+        _check_rtp_target(values),
+    ]
+    has_fail = any(check["status"] == "fail" for check in checks)
+    return {"ok": not has_fail, "checks": checks}
+
+
 def _render_form(
     fields: List[Dict[str, str]],
     values: Dict[str, str],
     missing: List[str],
     device_name: str,
+    env_overrides: Optional[Dict[str, str]] = None,
 ) -> str:
+    env_overrides = env_overrides or {}
+    backend_value = (values.get("NUVION_ZSAD_BACKEND") or "triton").strip().lower() or "triton"
+    if backend_value not in {"triton", "siglip", "mps", "none"}:
+        backend_value = "triton"
+    siglip_device_value = (values.get("NUVION_ZERO_SHOT_DEVICE") or "auto").strip().lower() or "auto"
+    if siglip_device_value not in {"auto", "mps", "cuda", "cpu"}:
+        siglip_device_value = "auto"
+
     rows: List[str] = []
+    hidden_inputs: List[str] = []
     for field in fields:
         key = field["key"]
         comment = field["comment"] or key
         value = values.get(key, field["default"])
+        if key in {"NUVION_ZSAD_BACKEND", "NUVION_ZERO_SHOT_DEVICE"}:
+            hidden_inputs.append(
+                '<input type="hidden" name="{key}" value="{value}">'.format(
+                    key=html.escape(key),
+                    value=html.escape(value or ""),
+                )
+            )
+            continue
+
+        group = _field_group(key)
         is_secret = _is_secret_key(key)
         input_type = "password" if is_secret else "text"
         placeholder = ""
@@ -402,12 +594,13 @@ def _render_form(
             placeholder = " required"
         rows.append(
             """
-            <div class="field">
+            <div class="field field-row group-{group}" data-group="{group}">
               <label>{label}<span class="key">{key}</span></label>
               <input type="{input_type}" name="{key}" value="{value}" {required} placeholder="{placeholder}">
               {note}
             </div>
             """.format(
+                group=html.escape(group),
                 label=html.escape(comment),
                 key=html.escape(key),
                 input_type=input_type,
@@ -422,6 +615,69 @@ def _render_form(
     if missing:
         error_items = " ".join(html.escape(key) for key in missing)
         error_block = f"<div class=\"error\">Missing required values: {error_items}</div>"
+
+    override_block = ""
+    if env_overrides:
+        override_rows: List[str] = []
+        for key in sorted(env_overrides.keys()):
+            env_value = "***" if _is_secret_key(key) else env_overrides[key]
+            override_rows.append(
+                "<li><code>{key}</code> = <code>{value}</code></li>".format(
+                    key=html.escape(key),
+                    value=html.escape(env_value),
+                )
+            )
+        override_block = """
+          <div class="card warning">
+            <h2>Environment Override Detected</h2>
+            <p class="muted">
+              These shell environment variables differ from the file values and will take precedence at runtime.
+            </p>
+            <ul class="override-list">
+              {rows}
+            </ul>
+          </div>
+        """.format(rows="\n".join(override_rows))
+
+    inference_block = """
+          <div class="card">
+            <h2>Inference Mode</h2>
+            <p class="muted">Choose backend first, then tune backend-specific options below.</p>
+            <div class="grid">
+              <div class="field">
+                <label>Backend</label>
+                <select id="inference-backend">
+                  <option value="triton" {triton_selected}>Triton (server/runtime)</option>
+                  <option value="siglip" {siglip_selected}>SigLIP (local)</option>
+                  <option value="mps" {mps_selected}>SigLIP + MPS (macOS)</option>
+                  <option value="none" {none_selected}>None (streaming only)</option>
+                </select>
+              </div>
+              <div class="field">
+                <label>SigLIP Device</label>
+                <select id="siglip-device">
+                  <option value="auto" {dev_auto_selected}>auto</option>
+                  <option value="mps" {dev_mps_selected}>mps</option>
+                  <option value="cuda" {dev_cuda_selected}>cuda</option>
+                  <option value="cpu" {dev_cpu_selected}>cpu</option>
+                </select>
+              </div>
+            </div>
+            <div class="actions left">
+              <button type="button" id="preflight-btn" onclick="runPreflight()">Run Preflight Check</button>
+            </div>
+            <div id="preflight-status" class="status"></div>
+          </div>
+    """.format(
+        triton_selected="selected" if backend_value == "triton" else "",
+        siglip_selected="selected" if backend_value == "siglip" else "",
+        mps_selected="selected" if backend_value == "mps" else "",
+        none_selected="selected" if backend_value == "none" else "",
+        dev_auto_selected="selected" if siglip_device_value == "auto" else "",
+        dev_mps_selected="selected" if siglip_device_value == "mps" else "",
+        dev_cuda_selected="selected" if siglip_device_value == "cuda" else "",
+        dev_cpu_selected="selected" if siglip_device_value == "cpu" else "",
+    )
 
     provision_block = """
           <div class="card">
@@ -509,6 +765,15 @@ def _render_form(
             flex-direction: column;
             margin-bottom: 18px;
           }}
+          .warning {{
+            border-color: #f2c979;
+            background: #fff8ea;
+          }}
+          .override-list {{
+            margin: 0;
+            padding-left: 18px;
+            font-size: 13px;
+          }}
           label {{
             font-weight: 600;
             margin-bottom: 6px;
@@ -534,6 +799,9 @@ def _render_form(
             font-size: 14px;
             background: white;
           }}
+          code {{
+            font-family: "SFMono-Regular", Menlo, Consolas, monospace;
+          }}
           .note {{
             font-size: 12px;
             color: var(--muted);
@@ -543,6 +811,10 @@ def _render_form(
             display: flex;
             justify-content: flex-end;
             margin-top: 18px;
+            gap: 10px;
+          }}
+          .actions.left {{
+            justify-content: flex-start;
           }}
           .grid {{
             display: grid;
@@ -558,6 +830,25 @@ def _render_form(
             margin-top: 12px;
             font-size: 13px;
             color: var(--muted);
+          }}
+          .checks {{
+            margin: 0;
+            padding-left: 18px;
+          }}
+          .checks li {{
+            margin-bottom: 6px;
+          }}
+          .check-pass {{
+            color: #0c7a34;
+          }}
+          .check-fail {{
+            color: #8a1f1f;
+          }}
+          .check-warn {{
+            color: #8b5a00;
+          }}
+          .check-skip {{
+            color: #555;
           }}
           button {{
             background: var(--accent);
@@ -583,10 +874,13 @@ def _render_form(
             <h1>Nuvion Agent Setup</h1>
             <p>Enter device settings and save.</p>
           </header>
+          {override_block}
+          {inference_block}
           {provision_block}
           <div class="card">
             {error_block}
-            <form method="post" action="/save">
+            <form id="config-form" method="post" action="/save">
+              {hidden_inputs}
               {rows}
               <div class="actions">
                 <button type="submit">Save</button>
@@ -691,10 +985,109 @@ def _render_form(
               statusEl.textContent = "Provisioning error: " + err;
             }}
           }}
+
+          function applyInferenceMode() {{
+            const backendSelect = document.getElementById("inference-backend");
+            const deviceSelect = document.getElementById("siglip-device");
+            if (!backendSelect || !deviceSelect) {{
+              return;
+            }}
+            const backend = (backendSelect.value || "triton").toLowerCase();
+            const siglipMode = backend === "siglip" || backend === "mps";
+            const tritonMode = backend === "triton";
+
+            document.querySelectorAll('.field-row[data-group="siglip"]').forEach((el) => {{
+              el.style.display = siglipMode ? "" : "none";
+            }});
+            document.querySelectorAll('.field-row[data-group="triton"]').forEach((el) => {{
+              el.style.display = tritonMode ? "" : "none";
+            }});
+
+            const backendInput = document.querySelector('input[name="NUVION_ZSAD_BACKEND"]');
+            if (backendInput) {{
+              backendInput.value = backend;
+            }}
+
+            if (backend === "mps") {{
+              deviceSelect.value = "mps";
+              deviceSelect.disabled = true;
+            }} else if (siglipMode) {{
+              deviceSelect.disabled = false;
+            }} else {{
+              deviceSelect.disabled = true;
+            }}
+
+            const deviceInput = document.querySelector('input[name="NUVION_ZERO_SHOT_DEVICE"]');
+            if (deviceInput) {{
+              deviceInput.value = deviceSelect.value || "auto";
+            }}
+          }}
+
+          async function runPreflight() {{
+            applyInferenceMode();
+            const statusEl = document.getElementById("preflight-status");
+            const btn = document.getElementById("preflight-btn");
+            const form = document.getElementById("config-form");
+            if (!statusEl || !btn || !form) {{
+              return;
+            }}
+
+            const values = {{}};
+            const data = new FormData(form);
+            data.forEach((value, key) => {{
+              values[key] = String(value);
+            }});
+
+            btn.disabled = true;
+            statusEl.textContent = "Running preflight checks...";
+            try {{
+              const resp = await fetch("/api/preflight", {{
+                method: "POST",
+                headers: {{ "Content-Type": "application/json" }},
+                body: JSON.stringify({{ values }})
+              }});
+              const result = await resp.json();
+              if (!resp.ok || result.error) {{
+                statusEl.textContent = result.error || "Preflight failed.";
+                return;
+              }}
+              const checks = result.checks || [];
+              if (!checks.length) {{
+                statusEl.textContent = "No check results.";
+                return;
+              }}
+              const lines = checks.map((check) => {{
+                const st = check.status || "warn";
+                return `<li class="check-${{st}}"><strong>${{check.name}}:</strong> ${{check.detail}}</li>`;
+              }}).join("");
+              statusEl.innerHTML = `<ul class="checks">${{lines}}</ul>`;
+            }} catch (err) {{
+              statusEl.textContent = "Preflight error: " + err;
+            }} finally {{
+              btn.disabled = false;
+            }}
+          }}
+
+          const backendSelect = document.getElementById("inference-backend");
+          const deviceSelect = document.getElementById("siglip-device");
+          if (backendSelect) {{
+            backendSelect.addEventListener("change", applyInferenceMode);
+          }}
+          if (deviceSelect) {{
+            deviceSelect.addEventListener("change", applyInferenceMode);
+          }}
+          applyInferenceMode();
         </script>
       </body>
     </html>
-    """.format(error_block=error_block, rows="\n".join(rows), provision_block=provision_block)
+    """.format(
+        error_block=error_block,
+        rows="\n".join(rows),
+        hidden_inputs="\n".join(hidden_inputs),
+        override_block=override_block,
+        inference_block=inference_block,
+        provision_block=provision_block,
+    )
 
 
 def run_web_setup(
@@ -729,7 +1122,13 @@ def run_web_setup(
         def do_GET(self) -> None:  # noqa: N802
             if self.path in ("/", "/index.html"):
                 missing = _validate_required(existing)
-                body = _render_form(fields, existing, missing, device_name)
+                body = _render_form(
+                    fields,
+                    existing,
+                    missing,
+                    device_name,
+                    env_overrides=_collect_env_overrides(fields, existing),
+                )
                 self._send_html(HTTPStatus.OK, body)
                 return
             if self.path == "/health":
@@ -790,6 +1189,34 @@ def run_web_setup(
                 self._send_json(HTTPStatus.OK, data)
                 return
 
+            if self.path == "/api/preflight":
+                length = int(self.headers.get("Content-Length", "0"))
+                body = self.rfile.read(length).decode("utf-8")
+                try:
+                    payload = json.loads(body) if body else {}
+                except json.JSONDecodeError:
+                    self._send_json(HTTPStatus.BAD_REQUEST, {"error": "Invalid JSON"})
+                    return
+
+                incoming_values = payload.get("values")
+                if not isinstance(incoming_values, dict):
+                    incoming_values = {}
+
+                values = dict(existing)
+                for field in fields:
+                    key = field["key"]
+                    raw = incoming_values.get(key)
+                    if raw is None:
+                        continue
+                    posted = str(raw).strip()
+                    if not posted and _is_secret_key(key) and existing.get(key):
+                        values[key] = existing[key]
+                    else:
+                        values[key] = posted
+
+                self._send_json(HTTPStatus.OK, _run_preflight(values))
+                return
+
             if self.path != "/save":
                 self.send_response(HTTPStatus.NOT_FOUND)
                 self.end_headers()
@@ -809,7 +1236,13 @@ def run_web_setup(
 
             missing = _validate_required(values)
             if missing:
-                body = _render_form(fields, values, missing, device_name)
+                body = _render_form(
+                    fields,
+                    values,
+                    missing,
+                    device_name,
+                    env_overrides=_collect_env_overrides(fields, values),
+                )
                 self._send_html(HTTPStatus.BAD_REQUEST, body)
                 return
 

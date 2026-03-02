@@ -143,6 +143,11 @@ nuv-agent setup
 This starts a local setup UI at `http://127.0.0.1:8088` (override with `--host/--port`).
 The setup UI includes an **Auto Provision** section: login with an owner/admin account to create
 device credentials automatically (your account credentials are not stored on the device).
+It also includes:
+- **Inference Mode** quick selector (`Triton | SigLIP | SigLIP+MPS | None`)
+- **Conditional settings view** (only backend-relevant fields are shown)
+- **Preflight Check** button (server login / triton health / camera source / RTP target)
+- **Environment override warning** when shell env values override file values
 
 For headless devices:
 ```bash
