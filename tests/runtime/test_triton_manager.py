@@ -36,6 +36,23 @@ class TritonManagerTest(unittest.TestCase):
             self.assertTrue((resolved / "image_encoder" / "1" / "model.onnx").exists())
             self.assertTrue((resolved / "image_encoder" / "config.pbtxt").exists())
 
+    def test_resolve_repository_macos_always_uses_onnx_repo(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            model_dir = Path(tmp)
+            default_repo = model_dir / "triton" / "model_repository" / "image_encoder"
+            (default_repo / "1").mkdir(parents=True, exist_ok=True)
+            (default_repo / "1" / "model.onnx").write_bytes(b"default-onnx")
+            (default_repo / "config.pbtxt").write_text('name: "image_encoder"\nplatform: "tensorrt_plan"\n')
+            (model_dir / "onnx").mkdir(parents=True, exist_ok=True)
+            (model_dir / "onnx" / "image_encoder_simplified.onnx").write_bytes(b"fallback-onnx")
+
+            with mock.patch.object(os, "uname", return_value=_Uname("Darwin")):
+                resolved = triton_manager.resolve_repository_for_runtime(model_dir)
+
+            self.assertEqual(resolved, model_dir / "triton" / "model_repository_onnx")
+            config = (resolved / "image_encoder" / "config.pbtxt").read_text()
+            self.assertIn('platform: "onnxruntime_onnx"', config)
+
 
 if __name__ == "__main__":
     unittest.main()

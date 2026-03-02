@@ -236,6 +236,7 @@ NUVION_ZSAD_BACKEND=triton python -m nuvion_app.agent.zsad_siglip_demo
 ## Triton backend notes
 - 기본 운영 경로는 **Triton + AnomalyCLIP** 입니다.
 - 기본 Triton 모델은 `image_encoder`, 입력은 `images`, 출력은 `image_features` 입니다.
+- macOS에서는 TensorRT(`model.plan`)를 사용하지 않고, ONNX 기반 `model_repository_onnx`를 자동 생성/사용합니다.
 
 ### AnomalyCLIP Triton mode
 AnomalyCLIP image encoder + precomputed text features를 함께 사용하려면:
@@ -263,6 +264,15 @@ export NUVION_TRITON_THRESHOLD=0.7
 docker rm -f triton-nuv 2>/dev/null || true
 docker run -d --name triton-nuv -p 8000:8000 \
   -v ~/.cache/nuvion/models/anomalyclip-current/triton/model_repository:/models \
+  nvcr.io/nvidia/tritonserver:24.10-py3 \
+  tritonserver --model-repository=/models
+```
+
+macOS 수동 실행(ONNX):
+```bash
+docker rm -f triton-nuv 2>/dev/null || true
+docker run -d --name triton-nuv -p 8000:8000 \
+  -v ~/.cache/nuvion/models/anomalyclip-current/triton/model_repository_onnx:/models \
   nvcr.io/nvidia/tritonserver:24.10-py3 \
   tritonserver --model-repository=/models
 ```

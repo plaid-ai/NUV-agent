@@ -96,15 +96,11 @@ def _ensure_macos_onnx_repository(model_dir: Path, repository_root: Path) -> Pat
     if not target_onnx.exists() or target_onnx.stat().st_size != onnx_src.stat().st_size:
         shutil.copy2(onnx_src, target_onnx)
 
-    source_config = model_dir / "triton" / "model_repository" / "image_encoder" / "config.pbtxt"
     target_config_dir = repository_root / "image_encoder"
     target_config_dir.mkdir(parents=True, exist_ok=True)
     target_config = target_config_dir / "config.pbtxt"
-
-    if source_config.exists():
-        shutil.copy2(source_config, target_config)
-    else:
-        target_config.write_text(_FALLBACK_CONFIG)
+    # macOS always uses ONNXRuntime config to avoid TensorRT(GPU-only) bootstrap failure.
+    target_config.write_text(_FALLBACK_CONFIG)
 
     return repository_root
 
@@ -114,10 +110,6 @@ def resolve_repository_for_runtime(model_dir: Path) -> Path:
     if os.uname().sysname.lower() != "darwin":
         if not default_repo.exists():
             raise BootstrapError("triton_health_failed", f"Triton model repository is missing: {default_repo}")
-        return default_repo
-
-    model_onnx = default_repo / "image_encoder" / "1" / "model.onnx"
-    if model_onnx.exists():
         return default_repo
 
     fallback = model_dir / "triton" / "model_repository_onnx"
