@@ -101,7 +101,7 @@ ZERO_SHOT_SAMPLE_SEC = parse_float(os.getenv("NUVION_ZERO_SHOT_SAMPLE_SEC"), 2.0
 LOCAL_DISPLAY = os.getenv("NUVION_LOCAL_DISPLAY", "false").lower() in ("1", "true", "yes")
 
 TRITON_THRESHOLD = parse_float(os.getenv("NUVION_TRITON_THRESHOLD"), 0.7)
-ZSAD_BACKEND = os.getenv("NUVION_ZSAD_BACKEND", "siglip").lower()
+ZSAD_BACKEND = os.getenv("NUVION_ZSAD_BACKEND", "triton").lower()
 
 CLIP_ENABLED = os.getenv("NUVION_CLIP_ENABLED", "true").lower() in ("1", "true", "yes")
 CLIP_PRE_SEC = parse_float(os.getenv("NUVION_CLIP_PRE_SEC"), 5.0)

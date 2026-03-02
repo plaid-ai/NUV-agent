@@ -14,3 +14,15 @@ dist/
 build/
 .aptly/
 .env
+
+# Local model artifacts
+*.onnx
+*.plan
+*.engine
+*.pth
+*.pt
+*.ckpt
+*.safetensors
+*/model_repository/
+models/
+.cache/

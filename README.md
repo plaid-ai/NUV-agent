@@ -47,6 +47,7 @@ GCS pointer를 통해 모델 번들을 내려받아 Triton/AnomalyCLIP 런타임
 # runtime: text_features + Triton model_repository (권장)
 nuv-agent pull-model \
   --gcs-pointer-uri gs://nuv-model/pointers/anomalyclip/prod.json \
+  --local-dir ~/.cache/nuvion/models/anomalyclip-current \
   --profile runtime
 ```
 
@@ -58,6 +59,28 @@ Profiles:
 기본값:
 - `NUVION_MODEL_GCS_POINTER_URI=gs://nuv-model/pointers/anomalyclip/prod.json`
 - `NUVION_MODEL_PROFILE=runtime`
+- `NUVION_MODEL_LOCAL_DIR=~/.cache/nuvion/models/anomalyclip-current`
+
+채널 포인터 예시:
+- Canary: `gs://nuv-model/pointers/anomalyclip/canary.json`
+- Prod: `gs://nuv-model/pointers/anomalyclip/prod.json`
+
+## FSD-style 모델 롤아웃 (권장)
+모델 파일은 버전 디렉토리(`v0001`, `v0002`, ...)에 immutable하게 두고, 장치는 channel pointer만 바라보게 운영합니다.
+
+1. 새 버전 업로드: `gs://nuv-model/nuvion/anomalyclip/v0002/...`
+2. Canary 포인터 승격:
+   ```bash
+   packaging/release/promote-model-pointer.sh \
+     --source-pointer gs://nuv-model/nuvion/anomalyclip/v0002/pointer.json \
+     --target-pointer gs://nuv-model/pointers/anomalyclip/canary.json
+   ```
+3. Prod 포인터 승격:
+   ```bash
+   packaging/release/promote-model-pointer.sh \
+     --source-pointer gs://nuv-model/nuvion/anomalyclip/v0002/pointer.json \
+     --target-pointer gs://nuv-model/pointers/anomalyclip/prod.json
+   ```
 
 ## macOS dev setup (Homebrew)
 Recommended for local runs on Apple Silicon.
@@ -121,7 +144,7 @@ For dev, `.env` in the repo is used automatically.
 - `NUVION_ANOMALY_LABELS`: comma-separated labels treated as anomalies
 - `NUVION_PRODUCTION_LABELS`: comma-separated labels counted for production
 - `NUVION_ZERO_SHOT_ENABLED`: enable optional zero-shot anomaly detection (requires model deps)
-- `NUVION_ZSAD_BACKEND`: `siglip` 또는 `triton`
+- `NUVION_ZSAD_BACKEND`: 기본 `triton` (장애 대응 시 `siglip`로 수동 전환 가능)
 - `NUVION_ZERO_SHOT_MODEL`: 기본 ZSAD 모델 (`google/siglip2-base-patch16-224`)
 - `NUVION_MODEL_GCS_POINTER_URI`: GCS pointer JSON URI (default: `gs://nuv-model/pointers/anomalyclip/prod.json`)
 - `NUVION_MODEL_PROFILE`: pull-model 프로필 (`runtime|light|full`)
@@ -147,8 +170,8 @@ NUVION_ZSAD_BACKEND=triton python -m nuvion_app.agent.zsad_siglip_demo
 ```
 
 ## Triton backend notes
-- 기본은 **SigLIP2 base (google/siglip2-base-patch16-224)** 기준으로 맞춰져 있습니다.
-- Triton 모델은 `siglip2-zsad`(기본값)으로 가정하며, 입력/출력 스펙은 `NUVION_TRITON_*`로 조정 가능합니다.
+- 기본 운영 경로는 **Triton + AnomalyCLIP** 입니다.
+- 기본 Triton 모델은 `image_encoder`, 입력은 `images`, 출력은 `image_features` 입니다.
 
 ### AnomalyCLIP Triton mode
 AnomalyCLIP image encoder + precomputed text features를 함께 사용하려면:
@@ -158,8 +181,8 @@ export NUVION_TRITON_MODE=anomalyclip
 export NUVION_TRITON_MODEL=image_encoder
 export NUVION_TRITON_INPUT=images
 export NUVION_TRITON_IMAGE_FEATURES_OUTPUT=image_features
-# pull-model을 --local-dir ~/.cache/nuvion/models/anomalyclip-v1 로 실행했다고 가정
-export NUVION_TRITON_TEXT_FEATURES=$HOME/.cache/nuvion/models/anomalyclip-v1/onnx/text_features.npy
+# pull-model을 --local-dir ~/.cache/nuvion/models/anomalyclip-current 로 실행했다고 가정
+export NUVION_TRITON_TEXT_FEATURES=$HOME/.cache/nuvion/models/anomalyclip-current/onnx/text_features.npy
 export NUVION_TRITON_THRESHOLD=0.7
 ```
 
