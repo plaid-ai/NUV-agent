@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import os
 import shutil
+import sys
 import time
 import urllib.error
 import urllib.request
@@ -57,6 +58,11 @@ def _truthy(value: str | None, default: bool = False) -> bool:
     if value is None:
         return default
     return value.strip().lower() in {"1", "true", "yes", "y", "on"}
+
+
+def _emit_progress(message: str) -> None:
+    sys.stderr.write(f"[BOOTSTRAP] {message}\n")
+    sys.stderr.flush()
 
 
 def _health_ready(host: str, port: int, timeout_sec: int) -> bool:
@@ -134,8 +140,10 @@ def ensure_triton_ready(stage: str, model_dir: Path) -> None:
         return
 
     if _health_ready(host, port, timeout_sec=3):
+        _emit_progress(f"Triton 이미 준비됨: {host}:{port}")
         return
 
+    _emit_progress("Triton이 준비되지 않아 Docker/Triton 자동 복구를 시작합니다.")
     ensure_docker_ready(triton_url)
 
     repository = resolve_repository_for_runtime(model_dir).resolve()
@@ -143,16 +151,20 @@ def ensure_triton_ready(stage: str, model_dir: Path) -> None:
     image = os.getenv("NUVION_TRITON_IMAGE", "nvcr.io/nvidia/tritonserver:24.10-py3").strip() or "nvcr.io/nvidia/tritonserver:24.10-py3"
 
     if container_exists(container_name):
+        _emit_progress(f"기존 Triton 컨테이너 확인: {container_name}")
         if container_running(container_name):
             if _health_ready(host, port, timeout_sec=5):
+                _emit_progress("기존 Triton 컨테이너 재사용 성공")
                 return
             remove_container(container_name)
         else:
             start_container(container_name)
             if _health_ready(host, port, timeout_sec=10):
+                _emit_progress("중지된 Triton 컨테이너 재기동 성공")
                 return
             remove_container(container_name)
 
+    _emit_progress(f"Triton 컨테이너 생성 중: {container_name}")
     run_triton_container(
         name=container_name,
         image=image,
@@ -168,3 +180,4 @@ def ensure_triton_ready(stage: str, model_dir: Path) -> None:
         )
 
     log.info("[BOOTSTRAP] Triton is ready (stage=%s, url=%s)", stage, triton_url)
+    _emit_progress(f"Triton 준비 완료: {host}:{port}")

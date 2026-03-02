@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import os
+import sys
 from pathlib import Path
 
 from nuvion_app.model_store import (
@@ -29,6 +30,11 @@ def _truthy(value: str | None, default: bool = False) -> bool:
     if value is None:
         return default
     return value.strip().lower() in {"1", "true", "yes", "y", "on"}
+
+
+def _emit_progress(message: str) -> None:
+    sys.stderr.write(f"[BOOTSTRAP] {message}\n")
+    sys.stderr.flush()
 
 
 def _is_darwin() -> bool:
@@ -110,6 +116,7 @@ def ensure_model_ready(stage: str) -> Path:
     model_dir = resolve_model_dir(profile)
     missing_before = _missing_required_files(model_dir, profile)
     if not missing_before:
+        _emit_progress(f"모델 파일 점검 완료: 누락 없음 ({model_dir})")
         return model_dir
 
     try:
@@ -119,7 +126,13 @@ def ensure_model_ready(stage: str) -> Path:
             os.getenv("NUVION_MODEL_PROFILE", DEFAULT_MODEL_PROFILE),
             os.getenv("NUVION_MODEL_SOURCE", DEFAULT_MODEL_SOURCE),
         )
+        _emit_progress(
+            f"모델 파일 누락 감지({len(missing_before)}개). "
+            f"자동 다운로드 시작: source={os.getenv('NUVION_MODEL_SOURCE', DEFAULT_MODEL_SOURCE)} "
+            f"profile={profile}"
+        )
         _pull_model(profile=profile, model_dir=model_dir)
+        _emit_progress("모델 다운로드 완료. 무결성 점검 중...")
     except Exception as exc:
         raise BootstrapError("model_pull_failed", f"Failed to pull model artifacts: {exc}") from exc
 
@@ -129,5 +142,6 @@ def ensure_model_ready(stage: str) -> Path:
             "model_pull_failed",
             f"Model pull finished but required files are still missing: {', '.join(missing_after)}",
         )
+    _emit_progress(f"모델 파일 점검 완료: 준비됨 ({model_dir})")
 
     return model_dir
