@@ -15,6 +15,9 @@ class _Uname:
 
 
 class TritonManagerTest(unittest.TestCase):
+    def tearDown(self) -> None:
+        triton_manager._managed_triton_container = None
+
     def test_resolve_repository_uses_default_on_linux(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             repo = Path(tmp) / "triton" / "model_repository"
@@ -53,6 +56,15 @@ class TritonManagerTest(unittest.TestCase):
             config = (resolved / "image_encoder" / "config.pbtxt").read_text()
             self.assertIn('platform: "onnxruntime_onnx"', config)
             self.assertNotIn('name: "images"', config)
+
+    def test_cleanup_managed_triton_stops_running_container(self) -> None:
+        triton_manager._managed_triton_container = "triton-nuv"
+        with mock.patch.object(triton_manager, "container_exists", return_value=True):
+            with mock.patch.object(triton_manager, "container_running", return_value=True):
+                with mock.patch.object(triton_manager, "stop_container") as stop_mock:
+                    triton_manager.cleanup_managed_triton(reason="unit_test")
+        stop_mock.assert_called_once_with("triton-nuv")
+        self.assertIsNone(triton_manager._managed_triton_container)
 
 
 if __name__ == "__main__":

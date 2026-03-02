@@ -204,6 +204,7 @@ For dev, `.env` in the repo is used automatically.
 - `NUVION_DOCKER_AUTOSTART`: Docker daemon 자동 기동 허용
 - `NUVION_TRITON_AUTOSTART`: Triton 컨테이너 자동 기동 허용
 - `NUVION_TRITON_AUTOSTART_ONLY_LOCAL`: local Triton URL에서만 자동 기동
+- `NUVION_TRITON_AUTOSTOP_ON_EXIT`: agent 종료 시 자동 기동한 Triton 컨테이너 자동 종료 (기본 `true`)
 - `NUVION_MODEL_AUTO_PULL_ON_SETUP`: setup 단계에서 model auto pull
 - `NUVION_MODEL_AUTO_PULL_ON_RUN`: run 단계에서 model auto pull
 - `NUVION_BOOTSTRAP_MAX_RETRIES`: bootstrap 재시도 횟수

@@ -150,6 +150,10 @@ def start_container(name: str) -> None:
         raise BootstrapError("triton_health_failed", f"Failed to start existing container '{name}'.")
 
 
+def stop_container(name: str) -> None:
+    run_command(["docker", "stop", name], check=False, capture_output=True)
+
+
 def remove_container(name: str) -> None:
     run_command(["docker", "rm", "-f", name], check=False)
 
