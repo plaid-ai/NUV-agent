@@ -6,11 +6,16 @@ import sys
 
 from nuvion_app.config import DEFAULT_PORT, load_env, resolve_config_path, setup_config
 from nuvion_app.model_store import (
+    DEFAULT_MODEL_POINTER,
+    DEFAULT_MODEL_PRESIGN_TTL_SECONDS,
     DEFAULT_MODEL_GCS_POINTER_URI,
+    DEFAULT_MODEL_SERVER_BASE_URL,
+    DEFAULT_MODEL_SOURCE,
     DEFAULT_MODEL_PROFILE,
     anomalyclip_text_features_path,
     anomalyclip_triton_repository_path,
     pull_model_from_gcs,
+    pull_model_from_server,
     resolve_default_model_dir,
 )
 
@@ -34,12 +39,50 @@ def _build_parser() -> argparse.ArgumentParser:
 
     pull_parser = subparsers.add_parser(
         "pull-model",
-        help="Download model artifacts from GCS pointer for Triton/AnomalyCLIP runtime",
+        help="Download model artifacts for Triton/AnomalyCLIP runtime (source=gcs|server)",
+    )
+    pull_parser.add_argument("--config", help="Path to config env file")
+    pull_parser.add_argument(
+        "--source",
+        choices=("gcs", "server"),
+        default=os.getenv("NUVION_MODEL_SOURCE", DEFAULT_MODEL_SOURCE),
+        help="Model artifact source",
     )
     pull_parser.add_argument(
         "--gcs-pointer-uri",
         default=os.getenv("NUVION_MODEL_GCS_POINTER_URI", DEFAULT_MODEL_GCS_POINTER_URI),
-        help="GCS pointer JSON URI",
+        help="GCS pointer JSON URI (used when --source gcs)",
+    )
+    pull_parser.add_argument(
+        "--pointer",
+        default=os.getenv("NUVION_MODEL_POINTER", DEFAULT_MODEL_POINTER),
+        help="Pointer identifier (used when --source server), e.g. anomalyclip/prod",
+    )
+    pull_parser.add_argument(
+        "--server-base-url",
+        default=os.getenv("NUVION_MODEL_SERVER_BASE_URL", os.getenv("NUVION_SERVER_BASE_URL", DEFAULT_MODEL_SERVER_BASE_URL)),
+        help="NUV-BE base URL for model presign API (used when --source server)",
+    )
+    pull_parser.add_argument(
+        "--ttl-seconds",
+        type=int,
+        default=int(os.getenv("NUVION_MODEL_PRESIGN_TTL_SECONDS", str(DEFAULT_MODEL_PRESIGN_TTL_SECONDS))),
+        help="Requested signed URL TTL seconds (used when --source server)",
+    )
+    pull_parser.add_argument(
+        "--access-token",
+        default=os.getenv("NUVION_MODEL_SERVER_ACCESS_TOKEN", ""),
+        help="Optional bearer token for presign API (used when --source server)",
+    )
+    pull_parser.add_argument(
+        "--username",
+        default=os.getenv("NUVION_DEVICE_USERNAME", ""),
+        help="Device username for /auth/login fallback (used when --source server and no token)",
+    )
+    pull_parser.add_argument(
+        "--password",
+        default=os.getenv("NUVION_DEVICE_PASSWORD", ""),
+        help="Device password for /auth/login fallback (used when --source server and no token)",
     )
     pull_parser.add_argument(
         "--local-dir",
@@ -63,6 +106,13 @@ def main() -> None:
     if sys.version_info < (3, 10):
         sys.stderr.write("Python 3.10+ is required.\n")
         sys.exit(2)
+
+    # Load default env early so parser defaults can resolve from config file.
+    try:
+        load_env()
+    except Exception:
+        pass
+
     parser = _build_parser()
     args = parser.parse_args()
 
@@ -97,14 +147,35 @@ def main() -> None:
         return
 
     if args.command == "pull-model":
+        load_env(args.config)
         try:
-            pointer_uri = args.gcs_pointer_uri.strip() or DEFAULT_MODEL_GCS_POINTER_URI
-            local_dir = args.local_dir.strip() or str(resolve_default_model_dir(pointer_uri))
-            model_dir, _ = pull_model_from_gcs(
-                pointer_uri=pointer_uri,
-                local_dir=local_dir,
-                profile=args.profile,
-            )
+            source = (args.source or DEFAULT_MODEL_SOURCE).strip().lower()
+            if source == "server":
+                pointer = (args.pointer or DEFAULT_MODEL_POINTER).strip()
+                local_dir = args.local_dir.strip() or str(resolve_default_model_dir(f"server:{pointer}:{args.profile}"))
+                server_base_url = (args.server_base_url or os.getenv("NUVION_SERVER_BASE_URL", "")).strip()
+                access_token = (args.access_token or "").strip() or None
+                username = (args.username or "").strip() or None
+                password = (args.password or "").strip() or None
+
+                model_dir, _ = pull_model_from_server(
+                    server_base_url=server_base_url,
+                    pointer=pointer,
+                    profile=args.profile,
+                    local_dir=local_dir,
+                    ttl_seconds=args.ttl_seconds,
+                    access_token=access_token,
+                    username=username,
+                    password=password,
+                )
+            else:
+                pointer_uri = args.gcs_pointer_uri.strip() or DEFAULT_MODEL_GCS_POINTER_URI
+                local_dir = args.local_dir.strip() or str(resolve_default_model_dir(pointer_uri))
+                model_dir, _ = pull_model_from_gcs(
+                    pointer_uri=pointer_uri,
+                    local_dir=local_dir,
+                    profile=args.profile,
+                )
         except Exception as exc:
             sys.stderr.write(f"Failed to pull model artifacts: {exc}\n")
             sys.exit(1)
@@ -113,7 +184,7 @@ def main() -> None:
         triton_repo = anomalyclip_triton_repository_path(model_dir)
 
         sys.stdout.write(f"Model artifacts downloaded to: {model_dir}\n")
-        sys.stdout.write("Source: gcs\n")
+        sys.stdout.write(f"Source: {args.source}\n")
         if text_features.exists():
             sys.stdout.write("Suggested env for AnomalyCLIP Triton backend:\n")
             sys.stdout.write("  NUVION_ZSAD_BACKEND=triton\n")
