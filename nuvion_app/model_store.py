@@ -465,7 +465,8 @@ def pull_model_from_gcs(
     downloaded: list[dict[str, Any]] = []
     for key in required_keys:
         src_obj, expected_sha256, expected_size = _artifact_path_from_pointer(artifacts[key], key)
-        src_uri = _gcs_uri(bucket, src_obj)
+        # Support both relative object paths and absolute gs:// URIs from pointer artifacts.
+        src_uri = src_obj if src_obj.startswith("gs://") else _gcs_uri(bucket, src_obj)
         local_rel = local_paths.get(key, _resolve_local_rel_path(key, src_obj))
         dst = (target_dir / local_rel).resolve()
         _copy_gcs_object(src_uri=src_uri, dst_path=dst)
