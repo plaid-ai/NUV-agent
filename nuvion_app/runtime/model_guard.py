@@ -47,7 +47,9 @@ def resolve_effective_profile() -> str:
     if _is_darwin():
         profile = (os.getenv("NUVION_TRITON_MAC_PROFILE", "full") or "full").strip().lower()
     else:
-        profile = (os.getenv("NUVION_TRITON_JETSON_PROFILE", default_profile) or default_profile).strip().lower()
+        # Jetson/Linux Triton path should default to the minimal runtime bundle
+        # (text_features + plan + triton_config + manifest) unless explicitly overridden.
+        profile = (os.getenv("NUVION_TRITON_JETSON_PROFILE", "runtime") or "runtime").strip().lower()
 
     if profile not in _VALID_PROFILES:
         return DEFAULT_MODEL_PROFILE
