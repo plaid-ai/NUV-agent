@@ -81,6 +81,10 @@ Profiles:
 - `light`: text features/metadata 중심의 경량 다운로드
 - `full`: 추가 분석/검증 파일까지 포함해서 다운로드
 
+포인터 호환:
+- `artifacts` 값을 문자열로 주는 기존 포맷과
+- `artifacts.<key>.path`를 사용하는 v2 포맷을 모두 지원합니다.
+
 기본값:
 - `NUVION_MODEL_SOURCE=server`
 - `NUVION_MODEL_POINTER=anomalyclip/prod`
