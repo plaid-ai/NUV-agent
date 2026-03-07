@@ -3,7 +3,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 PKG_NAME="nuv-agent"
-VERSION="${VERSION:-0.1.46}"
+VERSION="${VERSION:-0.1.47}"
 ARCH="${ARCH:-$(dpkg --print-architecture)}"
 BUILD_ROOT="${BUILD_ROOT:-$(mktemp -d)}"
 
@@ -49,6 +49,36 @@ cat > "$PKG_DIR/usr/bin/nuv-agent" <<'SCRIPT'
 #!/usr/bin/env bash
 set -euo pipefail
 export PYTHONNOUSERSITE=1
+
+prepend_path() {
+  local key="$1"
+  local value="$2"
+  local current="${!key-}"
+  if [ -z "$value" ]; then
+    return 0
+  fi
+  case ":$current:" in
+    *":$value:"*) ;;
+    *)
+      if [ -n "$current" ]; then
+        export "$key=$value:$current"
+      else
+        export "$key=$value"
+      fi
+      ;;
+  esac
+}
+
+for prefix in /opt/homebrew /usr/local; do
+  [ -d "$prefix/lib" ] && prepend_path DYLD_FALLBACK_LIBRARY_PATH "$prefix/lib"
+  [ -d "$prefix/lib/girepository-1.0" ] && prepend_path GI_TYPELIB_PATH "$prefix/lib/girepository-1.0"
+  [ -d "$prefix/lib/gstreamer-1.0" ] && prepend_path GST_PLUGIN_PATH "$prefix/lib/gstreamer-1.0"
+  [ -d "$prefix/opt/libnice-gstreamer/libexec/gstreamer-1.0" ] && prepend_path GST_PLUGIN_PATH "$prefix/opt/libnice-gstreamer/libexec/gstreamer-1.0"
+  if [ -z "${GST_PLUGIN_SCANNER:-}" ] && [ -x "$prefix/opt/gstreamer/libexec/gstreamer-1.0/gst-plugin-scanner" ]; then
+    export GST_PLUGIN_SCANNER="$prefix/opt/gstreamer/libexec/gstreamer-1.0/gst-plugin-scanner"
+  fi
+done
+
 exec /opt/nuv-agent/venv/bin/python -s -m nuvion_app.cli "$@"
 SCRIPT
 chmod 0755 "$PKG_DIR/usr/bin/nuv-agent"

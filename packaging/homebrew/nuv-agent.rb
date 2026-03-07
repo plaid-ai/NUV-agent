@@ -5,11 +5,12 @@ class NuvAgent < Formula
   homepage "https://github.com/plaid-ai/NUV-agent"
   url "__URL__"
   sha256 "__SHA256__"
-  version "0.1.46"
+  version "0.1.47"
   license "Proprietary"
 
   depends_on "python@3.14"
   depends_on "gstreamer"
+  depends_on "libnice-gstreamer"
   depends_on "gst-plugins-base"
   depends_on "gst-plugins-good"
   depends_on "gst-plugins-bad"
@@ -327,9 +328,10 @@ class NuvAgent < Formula
     end
 
     env = {
-      "DYLD_LIBRARY_PATH" => "#{HOMEBREW_PREFIX}/lib",
+      "DYLD_FALLBACK_LIBRARY_PATH" => "#{HOMEBREW_PREFIX}/lib:#{Formula["glib"].opt_lib}:#{Formula["gstreamer"].opt_lib}",
       "GI_TYPELIB_PATH" => "#{HOMEBREW_PREFIX}/lib/girepository-1.0",
-      "GST_PLUGIN_PATH" => "#{HOMEBREW_PREFIX}/lib/gstreamer-1.0",
+      "GST_PLUGIN_PATH" => "#{HOMEBREW_PREFIX}/lib/gstreamer-1.0:#{Formula["libnice-gstreamer"].opt_libexec}/gstreamer-1.0",
+      "GST_PLUGIN_SCANNER" => "#{Formula["gstreamer"].opt_libexec}/gstreamer-1.0/gst-plugin-scanner",
       "PYTHONNOUSERSITE" => "1",
       "PATH" => "#{HOMEBREW_PREFIX}/bin:#{HOMEBREW_PREFIX}/sbin:/usr/bin:/bin",
     }
@@ -359,9 +361,10 @@ class NuvAgent < Formula
     run [opt_bin/"nuv-agent", "run"]
     keep_alive true
     environment_variables NUV_AGENT_CONFIG: etc/"nuv-agent/agent.env",
-                          DYLD_LIBRARY_PATH: "#{HOMEBREW_PREFIX}/lib",
+                          DYLD_FALLBACK_LIBRARY_PATH: "#{HOMEBREW_PREFIX}/lib:#{Formula["glib"].opt_lib}:#{Formula["gstreamer"].opt_lib}",
                           GI_TYPELIB_PATH: "#{HOMEBREW_PREFIX}/lib/girepository-1.0",
-                          GST_PLUGIN_PATH: "#{HOMEBREW_PREFIX}/lib/gstreamer-1.0",
+                          GST_PLUGIN_PATH: "#{HOMEBREW_PREFIX}/lib/gstreamer-1.0:#{Formula["libnice-gstreamer"].opt_libexec}/gstreamer-1.0",
+                          GST_PLUGIN_SCANNER: "#{Formula["gstreamer"].opt_libexec}/gstreamer-1.0/gst-plugin-scanner",
                           PYTHONNOUSERSITE: "1",
                           PATH: "#{HOMEBREW_PREFIX}/bin:#{HOMEBREW_PREFIX}/sbin:/usr/bin:/bin"
     log_path var/"log/nuv-agent.log"

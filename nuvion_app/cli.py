@@ -225,6 +225,9 @@ def main() -> None:
             sys.stderr.write("Run `nuv-agent doctor --fix` and retry.\n")
             sys.exit(2)
 
+        from nuvion_app.runtime.gstreamer_env import configure_gstreamer_environment
+
+        configure_gstreamer_environment()
         from nuvion_app.inference.main import main as run_main
 
         run_main()
