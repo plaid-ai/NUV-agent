@@ -1567,6 +1567,8 @@ class GStreamerInferenceApp:
                 log.warning("[DEMO] GStreamer not-linked error detected. Trying pipeline restart.")
                 if self._restart_demo_pipeline("not-linked-error"):
                     return True
+            if self.webrtc_uplink and self.webrtc_uplink.handle_gstreamer_error(message, err, dbg):
+                return True
             log.error("GStreamer Error: %s, %s", err, dbg)
             self.shutdown()
         return True

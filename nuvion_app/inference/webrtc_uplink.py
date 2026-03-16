@@ -65,6 +65,18 @@ class WebRTCUplinkController:
     def has_pipeline(self) -> bool:
         return self._webrtcbin is not None
 
+    def handle_gstreamer_error(self, message: object, err: object, dbg: str | None) -> bool:
+        if not self._is_uplink_error_message(message, dbg):
+            return False
+
+        log.warning(
+            "[WEBRTC-UPLINK] handled internal GStreamer error without shutting down agent: %s, %s",
+            err,
+            dbg,
+        )
+        self.stop(send_signal=bool(self._session and not self._stop_sent))
+        return True
+
     def start(self, payload: dict[str, Any]) -> None:
         session_id = str(payload.get("sessionId") or "").strip()
         broadcast_id = str(payload.get("broadcastId") or "").strip()
@@ -72,8 +84,15 @@ class WebRTCUplinkController:
             log.warning("[WEBRTC-UPLINK] start payload missing sessionId or broadcastId: %s", payload)
             return
 
-        if self._session and self._session.session_id == session_id:
-            log.info("[WEBRTC-UPLINK] ignoring duplicate start for sessionId=%s", session_id)
+        if self._session:
+            if self._session.session_id == session_id:
+                log.info("[WEBRTC-UPLINK] ignoring duplicate start for sessionId=%s", session_id)
+                return
+            log.info(
+                "[WEBRTC-UPLINK] ignoring start for sessionId=%s because sessionId=%s is already active",
+                session_id,
+                self._session.session_id,
+            )
             return
 
         ice_servers = parse_ice_servers(payload.get("iceServers"))
@@ -139,6 +158,35 @@ class WebRTCUplinkController:
         session_id = str(payload.get("sessionId") or "").strip()
         return bool(self._session and session_id and session_id == self._session.session_id)
 
+    def _is_uplink_error_message(self, message: object, dbg: str | None) -> bool:
+        markers = ("webrtc_uplink", "transportreceivebin", "nicesrc", "gstwebrtcbin")
+        haystacks: list[str] = []
+
+        src = getattr(message, "src", None)
+        if src is not None:
+            get_name = getattr(src, "get_name", None)
+            if callable(get_name):
+                try:
+                    value = get_name()
+                    if value:
+                        haystacks.append(str(value).lower())
+                except Exception:
+                    pass
+
+            get_path_string = getattr(src, "get_path_string", None)
+            if callable(get_path_string):
+                try:
+                    value = get_path_string()
+                    if value:
+                        haystacks.append(str(value).lower())
+                except Exception:
+                    pass
+
+        if dbg:
+            haystacks.append(str(dbg).lower())
+
+        return any(marker in haystack for haystack in haystacks for marker in markers)
+
     def _start_on_main_loop(self) -> bool:
         if not self._webrtcbin or not self._session:
             return False
@@ -160,10 +208,12 @@ class WebRTCUplinkController:
         return False
 
     def _stop_on_main_loop(self) -> bool:
-        if self._pipeline:
+        if self._webrtcbin:
             try:
-                self._pipeline.send_event(Gst.Event.new_flush_start())
-                self._pipeline.send_event(Gst.Event.new_flush_stop(False))
+                # Flush only the WebRTC uplink branch. Flushing the whole pipeline also hits
+                # the clip recording branch and can leave live segment state inconsistent.
+                self._webrtcbin.send_event(Gst.Event.new_flush_start())
+                self._webrtcbin.send_event(Gst.Event.new_flush_stop(False))
             except Exception:
                 pass
         self._session = None
