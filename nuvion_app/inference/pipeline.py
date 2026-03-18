@@ -1202,7 +1202,7 @@ class GStreamerInferenceApp:
         )
 
         self.pipeline = None
-        self.loop = None
+        self.loop = GLib.MainLoop()
         self._demo_restarting = False
         self._demo_last_restart_at = 0.0
 
@@ -1213,6 +1213,12 @@ class GStreamerInferenceApp:
 
     def create_pipeline(self):
         Gst.init(None)
+        pipeline_string = self._build_pipeline_string()
+        log.info("[PIPELINE] %s", pipeline_string)
+        pipeline = Gst.parse_launch(pipeline_string)
+        self._bind_pipeline(pipeline)
+
+    def _build_pipeline_string(self) -> str:
         source_pipeline = build_video_source_pipeline(
             self.video_source,
             self.video_width,
@@ -1296,30 +1302,41 @@ class GStreamerInferenceApp:
                 f"{uplink_pipeline}"
             )
 
-        pipeline_string = f"{pipeline_string} webrtcbin name=webrtc_uplink bundle-policy=max-bundle latency=0"
+        return f"{pipeline_string} webrtcbin name=webrtc_uplink bundle-policy=max-bundle latency=0"
 
-        log.info("[PIPELINE] %s", pipeline_string)
-        self.pipeline = Gst.parse_launch(pipeline_string)
-        self.loop = GLib.MainLoop()
-
-        bus = self.pipeline.get_bus()
+    def _bind_pipeline(self, pipeline: Gst.Pipeline) -> None:
+        self.pipeline = pipeline
+        bus = pipeline.get_bus()
         bus.add_signal_watch()
         bus.connect("message", self.bus_call, self.loop)
 
-        appsink = self.pipeline.get_by_name("zsad_sink")
+        appsink = pipeline.get_by_name("zsad_sink")
         if appsink:
             appsink.connect("new-sample", on_new_sample, self.user_data)
         else:
             log.warning("[PIPELINE] zsad_sink not found.")
 
-        self.overlay = self.pipeline.get_by_name("zsad_overlay")
+        self.overlay = pipeline.get_by_name("zsad_overlay")
         if not self.overlay:
             log.warning("[PIPELINE] zsad_overlay not found.")
         else:
             self.update_overlay_text(self._default_overlay_text())
 
-        if self.webrtc_uplink and self.pipeline and not self.webrtc_uplink.attach_pipeline(self.pipeline):
+        if self.webrtc_uplink and not self.webrtc_uplink.attach_pipeline(pipeline):
             self.webrtc_uplink = None
+
+    def _dispose_pipeline(self) -> None:
+        if not self.pipeline:
+            return
+        try:
+            bus = self.pipeline.get_bus()
+            bus.remove_signal_watch()
+        except Exception:
+            pass
+        self.pipeline.set_state(Gst.State.NULL)
+        self.pipeline.get_state(2 * Gst.SECOND)
+        self.pipeline = None
+        self.overlay = None
 
     def _restart_demo_pipeline(self, reason: str) -> bool:
         if not self.pipeline:
@@ -1347,8 +1364,6 @@ class GStreamerInferenceApp:
             self._demo_restarting = False
 
     def _restart_uplink_pipeline(self, reason: str) -> bool:
-        if not self.pipeline:
-            return False
         now = time.time()
         if self._demo_restarting:
             return False
@@ -1358,8 +1373,9 @@ class GStreamerInferenceApp:
         self._demo_restarting = True
         self._demo_last_restart_at = now
         try:
-            self.pipeline.set_state(Gst.State.NULL)
-            self.pipeline.get_state(2 * Gst.SECOND)
+            self._dispose_pipeline()
+            pipeline = Gst.parse_launch(self._build_pipeline_string())
+            self._bind_pipeline(pipeline)
             restart_result = self.pipeline.set_state(Gst.State.PLAYING)
             if restart_result == Gst.StateChangeReturn.FAILURE:
                 return False
@@ -1371,6 +1387,8 @@ class GStreamerInferenceApp:
 
     def _handle_uplink_session_stopped(self, reason: str) -> None:
         normalized_reason = (reason or "").strip().lower()
+        if not self.user_data.running:
+            return
         if normalized_reason not in {"stopped", "broadcast-stop", "viewer-stop", "failed", "closed", "disconnected"}:
             return
 
