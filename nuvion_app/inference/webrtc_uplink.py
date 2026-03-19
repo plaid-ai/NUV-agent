@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import logging
-import time
 from dataclasses import dataclass
 from typing import Any, Callable
 
@@ -42,31 +41,18 @@ class WebRTCUplinkController:
         self,
         *,
         send_message: Callable[[str, dict[str, Any], bool], bool],
-        on_session_stopped: Callable[[str], None] | None = None,
         default_force_relay: bool = True,
     ) -> None:
         self._send_message = send_message
-        self._on_session_stopped = on_session_stopped
         self._default_force_relay = default_force_relay
         self._pipeline: Gst.Pipeline | None = None
         self._webrtcbin: Gst.Element | None = None
-        self._webrtc_gate: Gst.Element | None = None
         self._session: WebRTCUplinkSession | None = None
         self._stop_sent = False
-        self._stop_pending = False
-        self._stop_reason = ""
-        self._last_error_signature: tuple[str, str] | None = None
-        self._last_error_logged_at = 0.0
 
-    def attach_pipeline(
-        self,
-        pipeline: Gst.Pipeline,
-        element_name: str = "webrtc_uplink",
-        gate_name: str = "webrtc_gate",
-    ) -> bool:
+    def attach_pipeline(self, pipeline: Gst.Pipeline, element_name: str = "webrtc_uplink") -> bool:
         self._pipeline = pipeline
         self._webrtcbin = pipeline.get_by_name(element_name)
-        self._webrtc_gate = pipeline.get_by_name(gate_name)
         if not self._webrtcbin:
             log.warning("[WEBRTC-UPLINK] element '%s' not found.", element_name)
             return False
@@ -82,16 +68,7 @@ class WebRTCUplinkController:
     def handle_gstreamer_error(self, message: object, err: object, dbg: str | None) -> bool:
         if not self._is_uplink_error_message(message, dbg):
             return False
-        if self._stop_pending:
-            return True
 
-        now = time.monotonic()
-        if now - self._last_error_logged_at <= 1.0:
-            self.stop(send_signal=bool(self._session and not self._stop_sent))
-            return True
-
-        self._last_error_signature = self._error_signature(message, dbg)
-        self._last_error_logged_at = now
         log.warning(
             "[WEBRTC-UPLINK] handled internal GStreamer error without shutting down agent: %s, %s",
             err,
@@ -127,10 +104,6 @@ class WebRTCUplinkController:
             ice_servers=ice_servers,
         )
         self._stop_sent = False
-        self._stop_pending = False
-        self._stop_reason = ""
-        self._last_error_signature = None
-        self._last_error_logged_at = 0.0
         GLib.idle_add(self._start_on_main_loop)
 
     def apply_answer(self, payload: dict[str, Any]) -> None:
@@ -170,18 +143,10 @@ class WebRTCUplinkController:
             return
         state = str(payload.get("state") or payload.get("connectionState") or "").strip().lower()
         if state in {"failed", "closed", "stopped"}:
-            reason = str(payload.get("reason") or "").strip()
-            if reason:
-                log.warning("[WEBRTC-UPLINK] remote state=%s reason=%s. stopping local session.", state, reason)
-            else:
-                log.warning("[WEBRTC-UPLINK] remote state=%s. stopping local session.", state)
-            self.stop(send_signal=False, reason=reason or state)
+            log.warning("[WEBRTC-UPLINK] remote state=%s. stopping local session.", state)
+            self.stop(send_signal=False)
 
-    def stop(self, *, send_signal: bool = True, reason: str = "") -> None:
-        if self._stop_pending:
-            return
-        self._stop_pending = True
-        self._stop_reason = reason
+    def stop(self, *, send_signal: bool = True) -> None:
         if send_signal and self._session and not self._stop_sent:
             self._send_stop_message()
         GLib.idle_add(self._stop_on_main_loop)
@@ -192,18 +157,6 @@ class WebRTCUplinkController:
     def _matches_session(self, payload: dict[str, Any]) -> bool:
         session_id = str(payload.get("sessionId") or "").strip()
         return bool(self._session and session_id and session_id == self._session.session_id)
-
-    def _error_signature(self, message: object, dbg: str | None) -> tuple[str, str]:
-        src = getattr(message, "src", None)
-        src_path = ""
-        if src is not None:
-            get_path_string = getattr(src, "get_path_string", None)
-            if callable(get_path_string):
-                try:
-                    src_path = str(get_path_string() or "")
-                except Exception:
-                    src_path = ""
-        return src_path, str(dbg or "")
 
     def _is_uplink_error_message(self, message: object, dbg: str | None) -> bool:
         markers = ("webrtc_uplink", "transportreceivebin", "nicesrc", "gstwebrtcbin")
@@ -238,12 +191,6 @@ class WebRTCUplinkController:
         if not self._webrtcbin or not self._session:
             return False
 
-        if self._webrtc_gate:
-            try:
-                self._webrtc_gate.set_property("drop", False)
-            except Exception:
-                pass
-
         stun_server, turn_servers = to_gst_ice_server_config(self._session.ice_servers)
         self._webrtcbin.set_property("stun-server", stun_server or "")
         self._webrtcbin.set_property("turn-server", turn_servers[0] if turn_servers else "")
@@ -261,27 +208,15 @@ class WebRTCUplinkController:
         return False
 
     def _stop_on_main_loop(self) -> bool:
-        if self._webrtc_gate:
-            try:
-                # Gate the RTP branch before touching webrtcbin so live buffers stop flowing
-                # into a failed/closing peer connection.
-                self._webrtc_gate.set_property("drop", True)
-            except Exception:
-                pass
         if self._webrtcbin:
             try:
-                self._webrtcbin.emit("close")
+                # Flush only the WebRTC uplink branch. Flushing the whole pipeline also hits
+                # the clip recording branch and can leave live segment state inconsistent.
+                self._webrtcbin.send_event(Gst.Event.new_flush_start())
+                self._webrtcbin.send_event(Gst.Event.new_flush_stop(False))
             except Exception:
                 pass
         self._session = None
-        stop_reason = self._stop_reason
-        self._stop_reason = ""
-        self._stop_pending = False
-        if self._on_session_stopped is not None:
-            try:
-                self._on_session_stopped(stop_reason)
-            except Exception:
-                pass
         return False
 
     def _apply_answer_on_main_loop(self, sdp_text: str) -> bool:
@@ -352,14 +287,14 @@ class WebRTCUplinkController:
         state_nick = getattr(state, "value_nick", str(state))
         log.info("[WEBRTC-UPLINK] connection-state=%s", state_nick)
         if state_nick in {"failed", "closed"}:
-            self.stop(send_signal=not self._stop_sent, reason=state_nick)
+            self.stop(send_signal=not self._stop_sent)
 
     def _on_ice_connection_state_changed(self, element: Gst.Element, _pspec: object) -> None:
         state = element.get_property("ice-connection-state")
         state_nick = getattr(state, "value_nick", str(state))
         log.info("[WEBRTC-UPLINK] ice-connection-state=%s", state_nick)
         if state_nick in {"failed", "closed", "disconnected"} and self._session:
-            self.stop(send_signal=not self._stop_sent, reason=state_nick)
+            self.stop(send_signal=not self._stop_sent)
 
     def _send_stop_message(self) -> None:
         if not self._session:

@@ -61,17 +61,10 @@ class _FakeEventFactory:
 class _FakeEventTarget:
     def __init__(self) -> None:
         self.events: list[object] = []
-        self.properties: dict[str, object] = {}
 
     def send_event(self, event: object) -> bool:
         self.events.append(event)
         return True
-
-    def set_property(self, name: str, value: object) -> None:
-        self.properties[name] = value
-
-    def emit(self, signal_name: str, *_args: object) -> None:
-        self.events.append(signal_name)
 
 
 def _install_fake_gi() -> None:
@@ -175,36 +168,6 @@ class WebRTCUplinkControllerTest(unittest.TestCase):
         self.assertTrue(handled)
         self.assertEqual(len(_FakeGLib.calls), 2)
 
-    def test_handle_gstreamer_error_dedupes_repeated_stop_scheduling(self) -> None:
-        controller = self.module.WebRTCUplinkController(send_message=lambda *_args: True)
-        controller.start(
-            {
-                "broadcastId": "device-1",
-                "sessionId": "session-1",
-                "forceRelay": True,
-                "iceServers": [],
-            }
-        )
-
-        message = _FakeMessage(
-            _FakeSrc(
-                "nicesrc0",
-                "/GstPipeline:pipeline0/GstWebRTCBin:webrtc_uplink/TransportReceiveBin:transportreceivebin0/GstNiceSrc:nicesrc0",
-            )
-        )
-        controller.handle_gstreamer_error(
-            message,
-            "internal data stream error",
-            "../subprojects/gstreamer/.../GstNiceSrc:nicesrc0",
-        )
-        controller.handle_gstreamer_error(
-            message,
-            "internal data stream error",
-            "../subprojects/gstreamer/.../GstNiceSrc:nicesrc0",
-        )
-
-        self.assertEqual(len(_FakeGLib.calls), 2)
-
     def test_handle_gstreamer_error_does_not_swallow_non_uplink_errors(self) -> None:
         controller = self.module.WebRTCUplinkController(send_message=lambda *_args: True)
 
@@ -217,54 +180,10 @@ class WebRTCUplinkControllerTest(unittest.TestCase):
         self.assertFalse(handled)
         self.assertEqual(len(_FakeGLib.calls), 0)
 
-    def test_handle_remote_state_stopped_schedules_local_stop(self) -> None:
-        controller = self.module.WebRTCUplinkController(send_message=lambda *_args: True)
-        controller.start(
-            {
-                "broadcastId": "device-1",
-                "sessionId": "session-1",
-                "forceRelay": True,
-                "iceServers": [],
-            }
-        )
-
-        controller.handle_remote_state(
-            {
-                "broadcastId": "device-1",
-                "sessionId": "session-1",
-                "state": "STOPPED",
-                "reason": "viewer-stop",
-            }
-        )
-
-        self.assertEqual(len(_FakeGLib.calls), 2)
-
-    def test_stop_notifies_callback_with_reason(self) -> None:
-        reasons: list[str] = []
-        controller = self.module.WebRTCUplinkController(
-            send_message=lambda *_args: True,
-            on_session_stopped=reasons.append,
-        )
-        controller._webrtcbin = _FakeEventTarget()
-        controller._webrtc_gate = _FakeEventTarget()
-        controller._session = self.module.WebRTCUplinkSession(
-            broadcast_id="device-1",
-            session_id="session-1",
-            force_relay=True,
-            ice_servers=[],
-        )
-
-        controller.stop(send_signal=False, reason="broadcast-stop")
-        stop_call = _FakeGLib.calls[-1]
-        stop_call[0](*stop_call[1])
-
-        self.assertEqual(reasons, ["broadcast-stop"])
-
-    def test_stop_gates_webrtc_branch_and_clears_session(self) -> None:
+    def test_stop_flushes_only_webrtcbin_branch(self) -> None:
         controller = self.module.WebRTCUplinkController(send_message=lambda *_args: True)
         controller._pipeline = _FakeEventTarget()
         controller._webrtcbin = _FakeEventTarget()
-        controller._webrtc_gate = _FakeEventTarget()
         controller._session = self.module.WebRTCUplinkSession(
             broadcast_id="device-1",
             session_id="session-1",
@@ -274,8 +193,8 @@ class WebRTCUplinkControllerTest(unittest.TestCase):
 
         controller._stop_on_main_loop()
 
-        self.assertEqual(controller._webrtcbin.events, ["close"])
-        self.assertEqual(controller._webrtc_gate.properties, {"drop": True})
+        self.assertEqual(controller._webrtcbin.events, ["flush-start", "flush-stop"])
+        self.assertEqual(controller._pipeline.events, [])
         self.assertIsNone(controller._session)
 
 
